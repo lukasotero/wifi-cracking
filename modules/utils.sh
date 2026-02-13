@@ -244,8 +244,17 @@ check_handshake_loop() {
         if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
             if timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1 | grep -q "1 handshake"; then
                 # Handshake detectado - matar airodump
-                pkill -P $$ airodump-ng 2>/dev/null
+                # Usar pkill con patrón específico del BSSID
+                pkill -f "airodump-ng.*$bssid" 2>/dev/null
                 sleep 1
+                
+                # Si aún está vivo, usar kill más agresivo
+                if pgrep -f "airodump-ng.*$bssid" > /dev/null; then
+                    pkill -9 -f "airodump-ng.*$bssid" 2>/dev/null
+                fi
+                
+                # Crear archivo de señal para indicar que se capturó
+                touch "/tmp/handshake_captured_$$.flag"
                 
                 # Mostrar mensaje de éxito
                 clear
@@ -263,6 +272,7 @@ check_handshake_loop() {
         fi
     done
 }
+
 
 # Iniciar monitoreo de handshake en background
 check_handshake_loop "$BSSID" "$CAP_PATH" &
