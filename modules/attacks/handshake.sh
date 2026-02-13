@@ -19,7 +19,8 @@ function capture_handshake() {
     if [ $? -eq 0 ]; then
         bssid="$TARGET_BSSID"
         channel="$TARGET_CHANNEL"
-        default_name=$(echo "$TARGET_ESSID" | sed 's/ /_/g')
+        # Sanitizar nombre (solo alfanuméricos, guiones y puntos)
+        default_name=$(echo "$TARGET_ESSID" | sed 's/ /_/g' | tr -cd '[:alnum:]_.-')
         read -p "Nombre para el archivo de captura (Enter para '$default_name'): " filename
         if [ -z "$filename" ]; then filename="$default_name"; fi
     else
@@ -50,6 +51,8 @@ function capture_handshake() {
         if [ -z "$filename" ]; then 
             filename="handshake_$(date +%s)"
         fi
+        # Sanitizar nombre manual también
+        filename=$(echo "$filename" | tr -cd '[:alnum:]_.-')
         default_name="$filename"
     fi
     
@@ -82,8 +85,8 @@ function capture_handshake() {
             echo -e "  ${CYAN}●${NC} Estado de Captura:"
             echo -e "    ${RED}✗ Inactiva${NC} - La captura se detuvo"
             echo ""
-            echo -e "${YELLOW}[!] La captura se detuvo.${NC}"
-            echo -e "${YELLOW}[*] Verificando si se capturó el handshake...${NC}"
+            echo -e "${YELLOW}[!] La captura se detuvo o finalizó.${NC}"
+            echo -e "${YELLOW}[*] Verificando resultado...${NC}"
             
             # Buscar archivo de captura
             cap_to_check=""
@@ -107,15 +110,26 @@ function capture_handshake() {
                     
                     echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
                     echo ""
-                    read -p "¿Crackear ahora? (s/n): " crack_now
-                    if [[ "$crack_now" == "s" || "$crack_now" == "S" ]]; then
-                        crack_password_auto "$cap_to_check" "$bssid"
-                    fi
+                    
+                    # Preguntar crack immediate
+                    # Bucle input para evitar errores de buffer
+                    while true; do
+                        read -p "¿Crackear ahora? (s/n): " crack_now
+                        case $crack_now in
+                            [sS]* ) crack_password_auto "$cap_to_check" "$bssid"; break ;;
+                            [nN]* ) break ;;
+                            * ) echo "Por favor responde s o n." ;;
+                        esac
+                    done
                     break
                 else
                     echo -e "${RED}[!] No se detectó handshake en el archivo de captura.${NC}"
-                    echo -e "${YELLOW}[*] Eliminando archivos incompletos...${NC}"
-                    rm -f "${full_cap_path}"*
+                    # No borrarlo automáticamente por seguridad, preguntar
+                    read -p "¿Deseas limpiar estos archivos fallidos? (s/N): " clean_files
+                    if [[ "$clean_files" == "s" || "$clean_files" == "S" ]]; then
+                         rm -f "${full_cap_path}"*
+                         echo -e "${YELLOW}[*] Archivos eliminados.${NC}"
+                    fi
                     read -p "Presiona Enter para volver al menú principal..."
                     return
                 fi
@@ -130,15 +144,24 @@ function capture_handshake() {
         echo -e "  ${CYAN}●${NC} Estado de Captura:"
         echo -e "    ${GREEN}✓ Activa${NC} - Monitoreando tráfico..."
         echo ""
-        echo -e "  ${CYAN}ℹ${NC}  La ventana de captura se cierra automáticamente"
-        echo -e "     al detectar el handshake. Si no se captura,"
-        echo -e "     ejecuta un ataque de deauth."
+        echo -e "  ${CYAN}ℹ${NC}  La ventana externa se cerrará AL DETECTAR el handshake."
+        echo -e "     Si no sucede, usa las opciones de abajo:"
         echo ""
         echo -e "  ${CYAN}1${NC}  Deauth masiva (Broadcast)"
         echo -e "  ${CYAN}2${NC}  Deauth específica (Seleccionar cliente)"
-        echo -e "  ${CYAN}3${NC}  Volver al menú principal"
+        echo -e "  ${CYAN}3${NC}  Detener captura y verificar"
         echo ""
-        read -p "  → Opción: " hs_opt
+        
+        # Read con timeout para refrescar estado cada 3 segundos
+        read -t 3 -p "  → Opción: " hs_opt
+        exit_code=$?
+        
+        if [ $exit_code -ne 0 ]; then
+            # Timeout alcanzado, loop para refrescar estado (pgrep)
+            continue
+        fi
+
+        case $hs_opt in
         
         case $hs_opt in
             1)

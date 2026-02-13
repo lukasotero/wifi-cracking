@@ -30,30 +30,70 @@ function crack_password_auto() {
     read -p "Presiona Enter para continuar..."
 }
 
+function select_file() {
+    local pattern="$1"
+    local prompt_msg="$2"
+    local files=("$WORK_DIR"/$pattern)
+    
+    # Check if files exist (glob might not expand if no match)
+    if [ ! -e "${files[0]}" ]; then
+        echo -e "${RED}[!] No se encontraron archivos ($pattern) en $WORK_DIR${NC}"
+        return 1
+    fi
+
+    echo -e "${YELLOW}$prompt_msg${NC}"
+    local i=1
+    for file in "${files[@]}"; do
+        echo -e "  ${CYAN}$i)${NC} $(basename "$file")"
+        ((i++))
+    done
+    
+    echo ""
+    read -p "  → Selecciona un archivo (número): " choice
+    
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#files[@]}" ]; then
+        SELECTED_FILE="${files[$((choice-1))]}"
+        return 0
+    else
+        echo -e "${RED}[!] Selección inválida.${NC}"
+        return 1
+    fi
+}
+
 function verify_handshake() {
     banner
     echo -e "${YELLOW}[*] Verificar integridad del Handshake${NC}"
     
-    while true; do
-        read -p "Ingresa la ruta del archivo .cap: " cap_file
-        if [ -f "$cap_file" ]; then break; else echo -e "${RED}[!] Archivo no encontrado.${NC}"; fi
-    done
+    if ! select_file "*.cap" "Selecciona el archivo de captura a verificar:"; then
+        read -p "Presiona Enter para volver..."
+        return
+    fi
+    cap_file="$SELECTED_FILE"
     
     read -p "Ingresa el BSSID (opcional, Enter para omitir): " bssid
     
-    echo -e "${YELLOW}[*] Analizando archivo con cowpatty...${NC}"
+    echo -e "${YELLOW}[*] Analizando archivo: $(basename "$cap_file")...${NC}"
+    echo ""
     
     if [ -z "$bssid" ]; then
-        cowpatty -c -r "$cap_file"
+        # Modo general: Mostrar todas las redes y ver si alguna tiene handshake
+        aircrack-ng "$cap_file"
+        echo ""
+        echo -e "${CYAN}[i] Busca '(1 handshake)' en la columna 'WPA' o en el resumen.${NC}"
     else
-        echo -e "${YELLOW}[*] Usando aircrack-ng para validar handshake de $bssid...${NC}"
+        # Modo específico: Validar contra BSSID
+        echo -e "${YELLOW}[*] Validando handshake para $bssid...${NC}"
         output=$(aircrack-ng -b "$bssid" "$cap_file" 2>&1)
+        
+        # Mostrar salida filtrada relevante
+        echo "$output" | grep -E "handshake|No valid packets"
+        
         if echo "$output" | grep -q "1 handshake"; then
+             echo ""
              echo -e "${GREEN}[OK] Handshake VÁLIDO encontrado para $bssid.${NC}"
         else
+             echo ""
              echo -e "${RED}[!] NO se detectó un handshake válido o completo.${NC}"
-             echo "Salida de aircrack-ng:"
-             echo "$output" | grep -E "handshake|No valid packets"
         fi
     fi
      
@@ -116,14 +156,11 @@ function crack_password() {
     done
 
     # 2. Pedir archivo de captura (.cap)
-    while true; do
-        read -p "Ingresa la ruta del archivo de captura (.cap): " cap_file
-        if [ -f "$cap_file" ]; then
-            break
-        else
-            echo -e "${RED}[!] El archivo no existe. Intenta de nuevo.${NC}"
-        fi
-    done
+    if ! select_file "*.cap" "Selecciona el archivo de captura (.cap):"; then
+        read -p "Presiona Enter para volver..."
+        return
+    fi
+    cap_file="$SELECTED_FILE"
 
     # 3. Menú de recursos
     echo ""
@@ -198,21 +235,33 @@ function convert_cap_to_hc22000() {
     fi
     
     # 2. Seleccionar archivo .cap
-    while true; do
-        read -p "Ingresa la ruta del archivo .cap: " cap_file
-        if [ -f "$cap_file" ]; then break; else echo -e "${RED}[!] Archivo no encontrado.${NC}"; fi
-    done
+    if ! select_file "*.cap" "Selecciona el archivo .cap para convertir:"; then
+        read -p "Presiona Enter para volver..."
+        return
+    fi
+    cap_file="$SELECTED_FILE"
     
     local output_hc="${cap_file%.*}.hc22000"
+    
+    if [ -f "$output_hc" ]; then
+        echo -e "${YELLOW}[!] El archivo de salida ya existe: $output_hc${NC}"
+        read -p "¿Sobrescribir? (s/N): " choice
+        if [[ "$choice" != "s" && "$choice" != "S" ]]; then
+            echo -e "${YELLOW}[*] Operación cancelada.${NC}"
+            read -p "Presiona Enter para continuar..."
+            return
+        fi
+    fi
+    
     echo -e "${YELLOW}[*] Convirtiendo...${NC}"
     
     hcxpcapngtool -o "$output_hc" "$cap_file"
     
-    if [ -f "$output_hc" ]; then
+    if [ -f "$output_hc" ] && [ -s "$output_hc" ]; then
         echo -e "${GREEN}[+] Conversión completada exitosamente.${NC}"
         echo -e "${GREEN}[+] Archivo guardado en: $output_hc${NC}"
     else
-        echo -e "${RED}[!] Error durante la conversión. Verifica que el .cap sea válido.${NC}"
+        echo -e "${RED}[!] Error durante la conversión. Verifica que el .cap sea válido y contenga PMKID/EAPOL.${NC}"
     fi
     
     read -p "Presiona Enter para continuar..."

@@ -60,14 +60,9 @@ function start_scan_and_selection() {
 
     echo -e "${YELLOW}[*] Escaneando objetivos ($mode) por $duration segundos...${NC}"
     
-    if [[ "$mode" == "wash" ]]; then
-        wash -i "$mon_interface" -C > "${tmp_scan_prefix}.log" 2>&1 & 
-        local pid=$!
-    else
-        airodump-ng --output-format csv -w "$tmp_scan_prefix" "$mon_interface" > /dev/null 2>&1 &
-        local pid=$!
-    fi
-    
+    airodump-ng --output-format csv -w "$tmp_scan_prefix" "$mon_interface" > /dev/null 2>&1 &
+    local pid=$!
+
     for ((i=1; i<=duration; i++)); do
         echo -n "▓"
         sleep 1
@@ -77,40 +72,27 @@ function start_scan_and_selection() {
     kill $pid 2>/dev/null
     wait $pid 2>/dev/null
     
-    if [[ "$mode" == "wash" ]]; then
-        # Parsear salida de Wash (WPS)
-        # BSSID Ch RSSI WPS Lck ESSID
-        grep -E "^[0-9A-F]{2}:" "${tmp_scan_prefix}.log" | awk '{
-            essid=""; for(i=6;i<=NF;i++) essid=essid $i " ";
-            rssi=$3
-            if (length(essid) < 2) essid="<Oculta>";
-            # Wash output format assumed: BSSID|CHANNEL|ESSID|POWER|SECURITY
-            print $1 "|" $2 "|" essid "|" $3 "|" "WPS"
-        }' | sort -t'|' -k4 -nr > "$formatted_list"
+    local csv_file="${tmp_scan_prefix}-01.csv"
+    if [ ! -f "$csv_file" ]; then return 1; fi
+    
+    # Airodump CSV columns: BSSID(1)..CH(4)..Privacy(6)..Power(9)..ESSID(14)
+    awk -F, 'NR>1 && $1!="" && $1!~/Station MAC/ {
+        for(i=1; i<=NF; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
         
-    else
-        local csv_file="${tmp_scan_prefix}-01.csv"
-        if [ ! -f "$csv_file" ]; then return 1; fi
+        bssid=$1
+        chan=$4
+        priv=$6
+        pwr=$9
+        essid=$14
         
-        # Airodump CSV columns: BSSID(1)..CH(4)..Privacy(6)..Power(9)..ESSID(14)
-        awk -F, 'NR>1 && $1!="" && $1!~/Station MAC/ {
-            for(i=1; i<=NF; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
-            
-            bssid=$1
-            chan=$4
-            priv=$6
-            pwr=$9
-            essid=$14
-            
-            if(length(essid)==0) essid="<Oculta>";
-            if(length(priv)==0) priv="OPEN";
-            
-            # Filtros: Ocultas y Open (OPN)
-            if(length(essid)>0 && essid!="<Oculta>" && priv!="OPEN" && priv!="OPN") {
-               if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
-            }
-        }' "$csv_file" | sort -t'|' -k4 -nr > "$formatted_list"
-    fi
+        if(length(essid)==0) essid="<Oculta>";
+        if(length(priv)==0) priv="OPEN";
+        
+        # Filtros: Ocultas y Open (OPN)
+        if(length(essid)>0 && essid!="<Oculta>" && priv!="OPEN" && priv!="OPN") {
+           if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
+        }
+    }' "$csv_file" | sort -t'|' -k4 -nr > "$formatted_list"
     
     if [ -s "$formatted_list" ]; then
         show_target_selection_menu "$formatted_list"
@@ -121,11 +103,4 @@ function start_scan_and_selection() {
     fi
 }
 
-function scan_networks() {
-    banner
-    ensure_mon_interface
-    echo -e "${YELLOW}[*] Iniciando escaneo de redes (Modo Monitor).${NC}"
-    echo -e "${YELLOW}[*] Presiona CTRL+C para detener y volver al menú.${NC}"
-    read -p "Presiona Enter para comenzar..."
-    airodump-ng "$mon_interface"
-}
+

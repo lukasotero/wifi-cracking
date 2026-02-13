@@ -45,12 +45,24 @@ trap cleanup SIGINT EXIT
 
 function banner() {
     clear
-    echo -e "${GREEN}"
-    echo "  ╭─────────────────────────────────────────────────────╮"
-    echo "  │  WiFi Cracking Automation Toolkit                   │"
-    echo "  │  Dev by: Lukas Otero                                │"
-    echo "  ╰─────────────────────────────────────────────────────╯"
+    echo -e "${RED}"
+    echo "██╗    ██╗██╗███████╗██╗"
+    echo "██║    ██║██║██╔════╝██║"
+    echo "██║ █╗ ██║██║█████╗  ██║"
+    echo "██║███╗██║██║██╔══╝  ██║"
+    echo "╚███╔███╔╝██║██║     ██║"
+    echo " ╚══╝╚══╝ ╚═╝╚═╝     ╚═╝"
+    echo -e "${NC}${CYAN}"
+    echo "████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗██╗████████╗"
+    echo "╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██║ ██╔╝██║╚══██╔══╝"
+    echo "   ██║   ██║   ██║██║   ██║██║     █████╔╝ ██║   ██║   "
+    echo "   ██║   ██║   ██║██║   ██║██║     ██╔═██╗ ██║   ██║   "
+    echo "   ██║   ╚██████╔╝╚██████╔╝███████╗██║  ██╗██║   ██║   "
+    echo "   ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝   ╚═╝   "
     echo -e "${NC}"
+    echo -e "   ${YELLOW}>>> ${WHITE}WiFi Cracking & Auditing Toolkit ${YELLOW}<<<${NC}"
+    echo -e "             ${GREEN}[ Dev by: Lukas Otero ]${NC}"
+    echo -e "${RED}───────────────────────────────────────────────────────${NC}"
 }
 
 function show_loader() {
@@ -84,9 +96,6 @@ function check_dependencies() {
         "iwconfig:wireless-tools"
         "iw:iw"
         "wget:wget"
-        "wash:reaver"
-        "bully:bully"
-        "hcxdumptool:hcxtools"
         "macchanger:macchanger"
         "cowpatty:cowpatty"
     )
