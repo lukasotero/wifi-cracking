@@ -278,24 +278,10 @@ check_handshake_loop() {
                 echo "[$(date +%H:%M:%S)] Creando archivo de señal..." >> "$log_file"
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"
                 
-                # Mostrar mensaje de éxito
-                clear
-                echo ""
-                echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
-                echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
-                echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
-                echo ""
-                echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
-                echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
-                echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
-                echo -e "${CYAN}[DEBUG]${NC} Log guardado en: $log_file"
-                sleep 3
+                echo "[$(date +%H:%M:%S)] Handshake capturado, airodump muerto, señal creada" >> "$log_file"
+                echo "[$(date +%H:%M:%S)] El script principal detectará la señal y cerrará" >> "$log_file"
                 
-                echo "[$(date +%H:%M:%S)] Intentando matar wrapper PID $wrapper_pid..." >> "$log_file"
-                # Forzar salida del script completo
-                pkill -P $wrapper_pid 2>/dev/null
-                kill -9 $wrapper_pid 2>/dev/null
-                echo "[$(date +%H:%M:%S)] Monitor terminando" >> "$log_file"
+                # Terminar el monitor
                 exit 0
             else
                 echo "[$(date +%H:%M:%S)] No se detectó handshake" >> "$log_file"
@@ -324,8 +310,19 @@ wait $MONITOR_PID 2>/dev/null
 
 # Verificar si el monitor capturó el handshake
 if [ -f "/tmp/handshake_captured_$WRAPPER_PID.flag" ]; then
-    # El handshake fue capturado - el monitor ya mostró el mensaje de éxito
-    # Solo limpiar y salir
+    # El handshake fue capturado - mostrar mensaje de éxito
+    clear
+    echo ""
+    echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
+    echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
+    echo ""
+    echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
+    echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
+    echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
+    sleep 3
+    
+    # Limpiar y salir
     rm -f "/tmp/handshake_captured_$WRAPPER_PID.flag" 2>/dev/null
     exit 0
 fi
