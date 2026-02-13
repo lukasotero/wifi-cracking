@@ -225,12 +225,16 @@ echo ""
 check_handshake_loop() {
     local bssid="$1"
     local cap_path="$2"
-    local wrapper_pid="$3"  # Recibir PID como parámetro
+    local wrapper_pid="$3"
     local min_wait=3
     local counter=0
+    local log_file="/tmp/handshake_monitor_$wrapper_pid.log"
+    
+    echo "[$(date +%H:%M:%S)] Monitor iniciado. BSSID=$bssid, CAP=$cap_path, PID=$wrapper_pid" > "$log_file"
     
     # Espera inicial antes de empezar a verificar
     sleep 9
+    echo "[$(date +%H:%M:%S)] Espera inicial completada" >> "$log_file"
     
     while true; do
         sleep 3
@@ -244,20 +248,29 @@ check_handshake_loop() {
             cap_file="${cap_path}.cap"
         fi
         
+        echo "[$(date +%H:%M:%S)] Verificación #$counter - Archivo: $cap_file" >> "$log_file"
+        
         # Verificar handshake si existe el archivo
         if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
-            if timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1 | grep -q "1 handshake"; then
+            echo "[$(date +%H:%M:%S)] Archivo existe y no está vacío, verificando handshake..." >> "$log_file"
+            
+            if timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1 | tee -a "$log_file" | grep -q "1 handshake"; then
+                echo "[$(date +%H:%M:%S)] ¡HANDSHAKE DETECTADO!" >> "$log_file"
+                
                 # Handshake detectado - matar airodump
-                # Usar pkill con patrón específico del BSSID
+                echo "[$(date +%H:%M:%S)] Matando airodump..." >> "$log_file"
                 pkill -f "airodump-ng.*$bssid" 2>/dev/null
                 sleep 1
                 
                 # Si aún está vivo, usar kill más agresivo
                 if pgrep -f "airodump-ng.*$bssid" > /dev/null; then
+                    echo "[$(date +%H:%M:%S)] Airodump aún vivo, usando kill -9..." >> "$log_file"
                     pkill -9 -f "airodump-ng.*$bssid" 2>/dev/null
+                    sleep 1
                 fi
                 
-                # Crear archivo de señal para indicar que se capturó
+                # Crear archivo de señal
+                echo "[$(date +%H:%M:%S)] Creando archivo de señal..." >> "$log_file"
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"
                 
                 # Mostrar mensaje de éxito
@@ -270,13 +283,20 @@ check_handshake_loop() {
                 echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
                 echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
                 echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
+                echo -e "${CYAN}[DEBUG]${NC} Log guardado en: $log_file"
                 sleep 3
                 
-                # Terminar TODO el script wrapper (no solo esta función)
-                # Enviar SIGTERM al proceso padre (el script wrapper completo)
-                kill -TERM $wrapper_pid 2>/dev/null
+                echo "[$(date +%H:%M:%S)] Intentando matar wrapper PID $wrapper_pid..." >> "$log_file"
+                # Forzar salida del script completo
+                pkill -P $wrapper_pid 2>/dev/null
+                kill -9 $wrapper_pid 2>/dev/null
+                echo "[$(date +%H:%M:%S)] Monitor terminando" >> "$log_file"
                 exit 0
+            else
+                echo "[$(date +%H:%M:%S)] No se detectó handshake" >> "$log_file"
             fi
+        else
+            echo "[$(date +%H:%M:%S)] Archivo no existe o está vacío" >> "$log_file"
         fi
     done
 }
