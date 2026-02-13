@@ -239,58 +239,46 @@ echo -e "${YELLOW}[*]${NC} Iniciando airodump-ng..."
 echo ""
 
 # Función para verificar handshake en background
+# Función para verificar handshake en background
 check_handshake_loop() {
     local bssid="$1"
     local cap_path="$2"
     local wrapper_pid="$3"
     local min_wait=3
     local counter=0
-    local log_file="/tmp/handshake_monitor_$wrapper_pid.log"
-    
-    echo "[$(date +%H:%M:%S)] Monitor iniciado. BSSID=$bssid, CAP=$cap_path, PID=$wrapper_pid" > "$log_file"
     
     # Espera inicial antes de empezar a verificar
     sleep 9
-    echo "[$(date +%H:%M:%S)] Espera inicial completada" >> "$log_file"
     
     while true; do
         sleep 3
         counter=$((counter + 1))
         
-        # Buscar archivo de captura
-        local cap_file=""
-        if [ -f "${cap_path}-01.cap" ]; then
-            cap_file="${cap_path}-01.cap"
-        elif [ -f "${cap_path}.cap" ]; then
-            cap_file="${cap_path}.cap"
-        fi
+        # Buscar el archivo .cap más reciente (fail-safe por si se generó -02, -03...)
+        local cap_path_base="${cap_path%.*}"  # Quitar extensión si la tiene
+        local cap_file=$(ls -t "${cap_path_base}"-*.cap 2>/dev/null | head -n 1)
         
-        echo "[$(date +%H:%M:%S)] Verificación #$counter - Archivo: $cap_file" >> "$log_file"
+        # Normalizar BSSID a mayúsculas para la búsqueda
+        local target_bssid=$(echo "$bssid" | tr '[:lower:]' '[:upper:]')
         
         # Verificar handshake si existe el archivo
         if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
             # SINCRONIZAR DISCO Y TRABAJAR SOBRE COPIA
-            # Esto evita problemas de lectura en archivos abiertos
             sync
             cp -f "$cap_file" "/tmp/check_$wrapper_pid.cap" 2>/dev/null
             
-            echo "[$(date +%H:%M:%S)] Verificando copia temporal: /tmp/check_$wrapper_pid.cap" >> "$log_file"
-            
             # Ejecutar aircrack-ng sobre la copia
-            local aircrack_output=$(timeout 5 aircrack-ng -b "$bssid" "/tmp/check_$wrapper_pid.cap" 2>&1)
+            local aircrack_output=$(timeout 5 aircrack-ng "/tmp/check_$wrapper_pid.cap" 2>&1)
             
             # Limpiar copia
             rm -f "/tmp/check_$wrapper_pid.cap" 2>/dev/null
             
-            echo "$aircrack_output" >> "$log_file"
-            
-            # Buscar handshake de múltiples formas (case-insensitive)
-            if echo "$aircrack_output" | grep -qi "handshake"; then
-                echo "[$(date +%H:%M:%S)] ¡HANDSHAKE DETECTADO!" >> "$log_file"
+            # Buscar si nuestro BSSID tiene handshake
+            # Aircrack muestra: "1  AA:BB:CC:DD:EE:FF  NombreRed  WPA (1 handshake)"
+            if echo "$aircrack_output" | grep -F "$target_bssid" | grep -qi "handshake"; then
                 
                 # 1. Crear archivo de señal INMEDIATAMENTE
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"
-                echo "[$(date +%H:%M:%S)] Señal creada" >> "$log_file"
 
                 # 2. Intentar matar airodump específico
                 pkill -f "airodump-ng.*$bssid" 2>/dev/null
@@ -300,16 +288,11 @@ check_handshake_loop() {
                 
                 # 4. ENVIAR SEÑAL DE TERMINACIÓN AL WRAPPER PRINCIPAL
                 # Esto es lo que cerrará la ventana
-                echo "[$(date +%H:%M:%S)] Enviando SIGTERM al wrapper ($wrapper_pid)..." >> "$log_file"
                 kill -TERM "$wrapper_pid" 2>/dev/null
                 
                 # 5. Salir del monitor
                 exit 0
-            else
-                echo "[$(date +%H:%M:%S)] No se detectó handshake" >> "$log_file"
             fi
-        else
-            echo "[$(date +%H:%M:%S)] Archivo no existe o está vacío" >> "$log_file"
         fi
     done
 }
@@ -321,6 +304,9 @@ WRAPPER_PID=$$
 # Iniciar monitoreo de handshake en background
 check_handshake_loop "$BSSID" "$CAP_PATH" "$WRAPPER_PID" &
 MONITOR_PID=$!
+
+# Forzar escritura en disco cada 1 segundo para que el monitor detecte el handshake en tiempo real
+CMD="${CMD} --write-interval 1"
 
 # Ejecutar airodump en FOREGROUND (para que se vea la salida)
 eval "$CMD"
