@@ -254,7 +254,12 @@ check_handshake_loop() {
         if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
             echo "[$(date +%H:%M:%S)] Archivo existe y no está vacío, verificando handshake..." >> "$log_file"
             
-            if timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1 | tee -a "$log_file" | grep -q "1 handshake"; then
+            # Ejecutar aircrack-ng y capturar output
+            local aircrack_output=$(timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1)
+            echo "$aircrack_output" >> "$log_file"
+            
+            # Buscar handshake de múltiples formas
+            if echo "$aircrack_output" | grep -qi "handshake"; then
                 echo "[$(date +%H:%M:%S)] ¡HANDSHAKE DETECTADO!" >> "$log_file"
                 
                 # Handshake detectado - matar airodump
