@@ -40,7 +40,14 @@ function cleanup() {
              
              # Intentar verificar handshake
              has_valid_handshake=0
-             check_out=$(aircrack-ng "$cap_candidates" 2>&1)
+             
+             cmd_opts=""
+             if [ ! -z "$CURRENT_BSSID" ]; then
+                  cmd_opts="-b $CURRENT_BSSID"
+             fi
+             
+             # Run with timeout to prevent hang on prompt if multiple networks found
+             check_out=$(timeout 5 aircrack-ng $cmd_opts "$cap_candidates" 2>&1)
              
              if [ ! -z "$CURRENT_BSSID" ]; then
                   target_check=$(echo "$CURRENT_BSSID" | tr '[:lower:]' '[:upper:]')

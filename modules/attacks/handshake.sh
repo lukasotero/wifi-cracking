@@ -98,6 +98,7 @@ function capture_handshake() {
             fi
             
             # Verificar handshake si existe el archivo
+            if [ ! -z "$cap_to_check" ] && [ -s "$cap_to_check" ]; then
                 # Verificación más robusta
                 # Normalizar BSSID a mayúsculas
                 target_bssid_upper=$(echo "$bssid" | tr '[:lower:]' '[:upper:]')
