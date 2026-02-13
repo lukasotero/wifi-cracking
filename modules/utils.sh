@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# ==============================================================================
-# UTILS MODULE
-# ==============================================================================
-
 # Colores para el output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -50,10 +46,10 @@ trap cleanup SIGINT EXIT
 function banner() {
     clear
     echo -e "${GREEN}"
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║              WiFi Cracking Automation Toolkit            ║"
-    echo "║                  Dev by: Lukas Otero                     ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
+    echo "  ╭─────────────────────────────────────────────────────╮"
+    echo "  │  WiFi Cracking Automation Toolkit                  │"
+    echo "  │  Dev by: Lukas Otero                               │"
+    echo "  ╰─────────────────────────────────────────────────────╯"
     echo -e "${NC}"
 }
 
@@ -166,25 +162,129 @@ function check_monitor_support() {
 function run_in_new_terminal() {
     local cmd="$1"
     local title="$2"
+    local bssid="$3"
+    local cap_path="$4"
     
     echo -e "${YELLOW}[*] Abriendo ventana auxiliar para: $title...${NC}"
     
+    # Crear script wrapper temporal que auto-cierra cuando se captura el handshake
+    local wrapper_script="/tmp/airodump_wrapper_$$.sh"
+    
+    cat > "$wrapper_script" << 'WRAPPER_EOF'
+#!/bin/bash
+
+# Colores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+CMD="$1"
+BSSID="$2"
+CAP_PATH="$3"
+
+# Banner informativo
+clear
+echo ""
+echo -e "${CYAN}  ╭─────────────────────────────────────────────────────╮${NC}"
+echo -e "${CYAN}  │${NC}  ${GREEN}●${NC} Captura de Handshake en Progreso               ${CYAN}│${NC}"
+echo -e "${CYAN}  ╰─────────────────────────────────────────────────────╯${NC}"
+echo ""
+echo -e "  ${YELLOW}Target:${NC} $BSSID"
+echo ""
+echo -e "  ${CYAN}ℹ${NC}  Esta ventana se cerrará automáticamente al capturar"
+echo -e "  ${CYAN}ℹ${NC}  Ejecuta ataques deauth desde el menú principal"
+echo -e "  ${CYAN}ℹ${NC}  Si no se captura, el programa NO está trabado"
+echo ""
+echo -e "${YELLOW}[*]${NC} Iniciando airodump-ng..."
+echo ""
+
+# Ejecutar airodump en background
+eval "$CMD" &
+AIRODUMP_PID=$!
+
+# Función para verificar handshake
+check_handshake() {
+    local cap_file=""
+    
+    # Buscar archivo de captura
+    if [ -f "${CAP_PATH}-01.cap" ]; then
+        cap_file="${CAP_PATH}-01.cap"
+    elif [ -f "${CAP_PATH}.cap" ]; then
+        cap_file="${CAP_PATH}.cap"
+    fi
+    
+    if [ ! -z "$cap_file" ] && [ -f "$cap_file" ]; then
+        if aircrack-ng -b "$BSSID" "$cap_file" 2>&1 | grep -q "1 handshake"; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Monitoreo continuo
+echo -e "${CYAN}[*] Monitoreando captura... (verificando cada 3 segundos)${NC}"
+COUNTER=0
+
+while kill -0 $AIRODUMP_PID 2>/dev/null; do
+    sleep 3
+    COUNTER=$((COUNTER + 1))
+    
+    # Mostrar indicador de actividad cada 3 segundos
+    echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Verificando handshake... (intento #$COUNTER)\r"
+    
+    if check_handshake; then
+        echo ""
+        echo ""
+        echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
+        echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                ${GREEN}│${NC}"
+        echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
+        echo ""
+        echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
+        
+        # Matar proceso de airodump
+        kill $AIRODUMP_PID 2>/dev/null
+        wait $AIRODUMP_PID 2>/dev/null
+        
+        echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
+        echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
+        sleep 3
+        exit 0
+    fi
+done
+
+# Si el proceso terminó sin capturar handshake
+echo ""
+echo -e "${RED}[!] El proceso de captura finalizó.${NC}"
+echo -e "${YELLOW}[*] Esta ventana se cerrará en 5 segundos...${NC}"
+sleep 5
+WRAPPER_EOF
+
+    chmod +x "$wrapper_script"
+    
+    # Construir comando completo con el wrapper
+    local full_cmd="$wrapper_script '$cmd' '$bssid' '$cap_path'"
+    
     # Intentar detectar emuladores de terminal comunes en Kali/Linux
     if command -v x-terminal-emulator > /dev/null 2>&1; then
-        x-terminal-emulator -e "bash -c '$cmd; exec bash'" &
+        x-terminal-emulator -e "bash -c '$full_cmd'" &
     elif command -v qterminal > /dev/null 2>&1; then
-        qterminal -e "bash -c '$cmd; exec bash'" &
+        qterminal -e "bash -c '$full_cmd'" &
     elif command -v gnome-terminal > /dev/null 2>&1; then
-        gnome-terminal -- bash -c "$cmd; exec bash" &
+        gnome-terminal -- bash -c "$full_cmd" &
     elif command -v xfce4-terminal > /dev/null 2>&1; then
-        xfce4-terminal -e "bash -c '$cmd; exec bash'" &
+        xfce4-terminal -e "bash -c '$full_cmd'" &
     elif command -v xterm > /dev/null 2>&1; then
-        xterm -title "$title" -e "bash -c '$cmd; exec bash'" &
+        xterm -title "$title" -e "bash -c '$full_cmd'" &
     else
         echo -e "${RED}[!] No se pudo abrir una nueva terminal automáticamente.${NC}"
         echo -e "${YELLOW}[*] Ejecutando en segundo plano (background)...${NC}"
         eval "$cmd" &
     fi
+    
+    # Limpiar script wrapper después de 2 segundos (dar tiempo a que se ejecute)
+    (sleep 2; rm -f "$wrapper_script" 2>/dev/null) &
 }
 
 function get_wireless_interfaces() {

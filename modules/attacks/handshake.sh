@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# ==============================================================================
-# ATTACKS: HANDSHAKE
-# ==============================================================================
-
 function capture_handshake() {
     banner
     ensure_mon_interface
@@ -35,7 +31,8 @@ function capture_handshake() {
     echo -e "${YELLOW}[*] Iniciando captura en canal $channel...${NC}"
     
     airodump_cmd="airodump-ng -c $channel --bssid $bssid -w $full_cap_path $mon_interface"
-    run_in_new_terminal "$airodump_cmd" "Capturando Handshake - $bssid"
+    run_in_new_terminal "$airodump_cmd" "Capturando Handshake - $bssid" "$bssid" "$full_cap_path"
+
     
     echo -e "${YELLOW}[*] Esperando 5 segundos...${NC}"
     sleep 5
@@ -43,14 +40,28 @@ function capture_handshake() {
     while true; do
         clear
         banner
-        echo -e "${YELLOW}╔════════════════ HANDSHAKE MENU ═════════════════╗${NC}"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" "Target: $default_name ($bssid)"
-        echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 1) Deauth masiva (Broadcast)"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 2) Deauth específica (Seleccionar cliente)"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 3) Volver al menú principal"
-        echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
         echo ""
+        echo -e "${YELLOW}  CAPTURA DE HANDSHAKE${NC}"
+        echo -e "  Target: ${GREEN}$default_name${NC} (${CYAN}$bssid${NC})"
+        echo ""
+        
+        # Indicador de estado de captura
+        echo -e "  ${CYAN}●${NC} Estado de Captura:"
+        if pgrep -f "airodump-ng.*$bssid" > /dev/null; then
+            echo -e "    ${GREEN}✓ Activa${NC} - Monitoreando tráfico..."
+        else
+            echo -e "    ${RED}✗ Inactiva${NC} - No hay captura en curso"
+        fi
+        echo ""
+        echo -e "  ${CYAN}ℹ${NC}  La ventana de captura se cierra automáticamente"
+        echo -e "     al detectar el handshake. Si no se captura,"
+        echo -e "     ejecuta un ataque de deauth."
+        echo ""
+        echo -e "  ${CYAN}1${NC}  Deauth masiva (Broadcast)"
+        echo -e "  ${CYAN}2${NC}  Deauth específica (Seleccionar cliente)"
+        echo -e "  ${CYAN}3${NC}  Volver al menú principal"
+        echo ""
+        read -p "  → Opción: " hs_opt
         
         # Verificar estado de captura (intentar -01.cap y el nombre base)
         cap_to_check=""
@@ -77,8 +88,6 @@ function capture_handshake() {
              fi
              break
         fi
-
-        read -p "Opción: " hs_opt
         
         case $hs_opt in
             1)

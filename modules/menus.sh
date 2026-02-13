@@ -3,17 +3,18 @@
 function extra_tools_menu() {
     clear
     banner
-    echo -e "${YELLOW}╔══════════════════ EXTRA TOOLS ═══════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Escanear redes (airodump-ng)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque desautenticación manual"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Verificar handshake (.cap)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Crackear contraseña (manual)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Convertir .cap a .hc22000 (hashcat)"
-    echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 6) Volver"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -p "Opción: " ext_opt
+    echo -e "${YELLOW}  HERRAMIENTAS${NC}"
+    echo ""
+    echo -e "  ${CYAN}1${NC}  Escanear redes (airodump-ng)"
+    echo -e "  ${CYAN}2${NC}  Ataque desautenticación manual"
+    echo -e "  ${CYAN}3${NC}  Verificar handshake (.cap)"
+    echo -e "  ${CYAN}4${NC}  Crackear contraseña (manual)"
+    echo -e "  ${CYAN}5${NC}  Convertir .cap a .hc22000 (hashcat)"
+    echo ""
+    echo -e "  ${CYAN}6${NC}  Volver"
+    echo ""
+    read -p "  → Opción: " ext_opt
     case $ext_opt in
         1) scan_networks ;;
         2) deauth_attack ;;

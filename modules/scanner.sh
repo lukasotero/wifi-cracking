@@ -3,9 +3,11 @@
 function show_target_selection_menu() {
     local source_file="$1"
     
-    echo -e "\n${YELLOW}╔════╤═══════════════════╤════╤═════════╤══════════╤══════════════════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} %-7s ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-28s ${YELLOW}║${NC}\n" "ID" "BSSID" "CH" "PWR" "SEC" "ESSID"
-    echo -e "${YELLOW}╠════╪═══════════════════╪════╪═════════╪══════════╪══════════════════════════════╣${NC}"
+    echo ""
+    echo -e "${YELLOW}  REDES DISPONIBLES${NC}"
+    echo ""
+    printf "  ${CYAN}%-2s  %-17s  %-2s  %-7s  %-8s  %-28s${NC}\n" "ID" "BSSID" "CH" "PWR" "SEC" "ESSID"
+    printf "  ${CYAN}%-2s  %-17s  %-2s  %-7s  %-8s  %-28s${NC}\n" "--" "-----------------" "--" "-------" "--------" "----------------------------"
     
     local -a bssids
     local -a channels
@@ -24,16 +26,15 @@ function show_target_selection_menu() {
              if [[ "$pwr" -lt -70 ]]; then pwr_color="${YELLOW}"; fi
              if [[ "$pwr" -lt -85 ]]; then pwr_color="${RED}"; fi
              
-             printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} ${pwr_color}%-7s${NC} ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-28.28s ${YELLOW}║${NC}\n" "$i" "$bssid" "$channel" "$pwr" "$security" "$essid"
+             printf "  %-2s  ${CYAN}%-17s${NC}  %-2s  ${pwr_color}%-7s${NC}  %-8s  ${GREEN}%-28.28s${NC}\n" "$i" "$bssid" "$channel" "$pwr" "$security" "$essid"
              ((i++))
         fi
     done < "$source_file"
     
-    echo -e "${YELLOW}╚════╧═══════════════════╧════╧═════════╧══════════╧══════════════════════════════╝${NC}"
-    
     echo ""
-    echo "0) Entrada Manual o Re-escanear"
-    read -p "Selecciona el número de la red objetivo: " selection
+    echo -e "  ${CYAN}0${NC}  Entrada manual o re-escanear"
+    echo ""
+    read -p "  → Selecciona el número: " selection
     
     if [[ "$selection" == "0" ]]; then
         return 1

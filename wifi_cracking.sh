@@ -1,19 +1,9 @@
 #!/bin/bash
 
-# ==============================================================================
-# WIFI CRACKING AUTOMATION TOOLKIT
-# ==============================================================================
-# MAIN SCRIPT
-# ==============================================================================
-# Description:
-#   Main entry point that loads all modules and runs the primary interactive loop.
-# ==============================================================================
-
-# 1. Obtener directorio del script
+# Obtener directorio del script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 2. Cargar Módulos (Sourcing)
-#    Orden de carga importante para dependencias internas
+# Cargar Módulos
 source "$SCRIPT_DIR/modules/utils.sh"
 source "$SCRIPT_DIR/modules/scanner.sh"
 source "$SCRIPT_DIR/modules/cracking.sh"
@@ -23,23 +13,24 @@ source "$SCRIPT_DIR/modules/attacks/wps.sh"
 source "$SCRIPT_DIR/modules/attacks/pmkid.sh"
 source "$SCRIPT_DIR/modules/menus.sh"
 
-# 3. Verificaciones Iniciales
+# Verificaciones Iniciales
 check_root
 check_dependencies
 
-# 4. Bucle Principal del Programa
+# Bucle Principal
 while true; do
     banner
-    echo -e "${YELLOW}╔══════════════════ ATTACK MENU ═══════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque WPA/WPA2 clásico (handshake)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque WPS (pixie dust)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Ataque PMKID (client-less)"
-    echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Herramientas"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Salir"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -p "Selecciona una opción: " option
+    echo -e "${YELLOW}  MENÚ DE ATAQUES${NC}"
+    echo ""
+    echo -e "  ${CYAN}1${NC}  Ataque WPA/WPA2 clásico (handshake)"
+    echo -e "  ${CYAN}2${NC}  Ataque WPS (pixie dust)"
+    echo -e "  ${CYAN}3${NC}  Ataque PMKID (client-less)"
+    echo ""
+    echo -e "  ${CYAN}4${NC}  Herramientas"
+    echo -e "  ${CYAN}5${NC}  Salir"
+    echo ""
+    read -p "  → Opción: " option
     
     case $option in
         1) capture_handshake ;;

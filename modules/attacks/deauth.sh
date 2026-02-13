@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# ==============================================================================
-# ATTACKS: DEAUTH
-# ==============================================================================
-
 function deauth_attack() {
     banner
     ensure_mon_interface
@@ -23,18 +19,18 @@ function deauth_attack() {
     while true; do
         clear
         banner
-    echo -e "${YELLOW}╔══════════════════ DEAUTH MENU ═══════════════════╗${NC}"
-    local disp_essid=$(echo "$target_essid" | cut -c 1-18)
-    
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" "Target: $disp_essid ($target_bssid)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" "Channel: $target_ch"
-    echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque masivo (Broadcast - 15 pkts)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque particular (Buscar clientes)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Volver"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
+        local disp_essid=$(echo "$target_essid" | cut -c 1-30)
+        
         echo ""
-        read -p "Opción: " d_opt
+        echo -e "${YELLOW}  ATAQUE DEAUTH${NC}"
+        echo -e "  Target: ${GREEN}$disp_essid${NC} (${CYAN}$target_bssid${NC})"
+        echo -e "  Channel: ${CYAN}$target_ch${NC}"
+        echo ""
+        echo -e "  ${CYAN}1${NC}  Ataque masivo (Broadcast - 15 pkts)"
+        echo -e "  ${CYAN}2${NC}  Ataque particular (Buscar clientes)"
+        echo -e "  ${CYAN}3${NC}  Volver"
+        echo ""
+        read -p "  → Opción: " d_opt
         
         case $d_opt in
             1)

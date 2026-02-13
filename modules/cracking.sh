@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# ==============================================================================
-# CRACKING: PASSWORD CRACKING & VERIFICATION
-# ==============================================================================
-
 function crack_password_auto() {
     local cap_file_input="$1"
     local bssid_input="$2"
