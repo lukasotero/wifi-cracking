@@ -50,14 +50,21 @@ function capture_handshake() {
         echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
         echo ""
         
-        # Verificar estado de captura en segundo plano
-        if aircrack-ng -b "$bssid" "$full_cap_path-01.cap" 2>&1 | grep -q "1 handshake"; then
+        # Verificar estado de captura (intentar -01.cap y el nombre base)
+        cap_to_check=""
+        if [ -f "${full_cap_path}-01.cap" ]; then
+            cap_to_check="${full_cap_path}-01.cap"
+        elif [ -f "${full_cap_path}.cap" ]; then
+            cap_to_check="${full_cap_path}.cap"
+        fi
+
+        if [ ! -z "$cap_to_check" ] && aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
              echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE ${NC}"
              export HANDSHAKE_CAPTURED=1
              pkill -f "airodump-ng.*$bssid"
              read -p "¿Crackear ahora? (s/n): " crack_now
              if [[ "$crack_now" == "s" || "$crack_now" == "S" ]]; then
-                 crack_password_auto "$full_cap_path-01.cap" "$bssid"
+                 crack_password_auto "$cap_to_check" "$bssid"
              fi
              break
         fi

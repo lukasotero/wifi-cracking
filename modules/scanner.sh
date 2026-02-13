@@ -104,8 +104,8 @@ function start_scan_and_selection() {
             if(length(essid)==0) essid="<Oculta>";
             if(length(priv)==0) priv="OPEN";
             
-            # Filtros: Ocultas y Open
-            if(length(essid)>0 && essid!="<Oculta>" && priv!="OPEN") {
+            # Filtros: Ocultas y Open (OPN)
+            if(length(essid)>0 && essid!="<Oculta>" && priv!="OPEN" && priv!="OPN") {
                if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
             }
         }' "$csv_file" | sort -t'|' -k4 -nr > "$formatted_list"
