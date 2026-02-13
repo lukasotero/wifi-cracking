@@ -57,6 +57,7 @@ function capture_handshake() {
     fi
     
     full_cap_path="$WORK_DIR/$filename"
+    export CURRENT_BSSID="$bssid"
     
     # Limpiar archivos previos con el mismo nombre para asegurar que airodump empiece en -01
     rm -f "${full_cap_path}"*
@@ -97,8 +98,15 @@ function capture_handshake() {
             fi
             
             # Verificar handshake si existe el archivo
-            if [ ! -z "$cap_to_check" ] && [ -s "$cap_to_check" ]; then
-                if timeout 10 aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
+                # Verificación más robusta
+                # Normalizar BSSID a mayúsculas
+                target_bssid_upper=$(echo "$bssid" | tr '[:lower:]' '[:upper:]')
+                
+                # Ejecutar aircrack y capturar salida
+                check_output=$(timeout 15 aircrack-ng "$cap_to_check" 2>&1)
+                
+                # Verificar si contiene handshake para el BSSID objetivo (o en general si solo hay una red)
+                if echo "$check_output" | grep -F "$target_bssid_upper" | grep -E "handshake|Handshake" | grep -qv "0 handshake"; then
                     echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE${NC}"
                     export HANDSHAKE_CAPTURED=1
                     
@@ -112,7 +120,6 @@ function capture_handshake() {
                     echo ""
                     
                     # Preguntar crack immediate
-                    # Bucle input para evitar errores de buffer
                     while true; do
                         read -p "¿Crackear ahora? (s/n): " crack_now
                         case $crack_now in
@@ -123,13 +130,15 @@ function capture_handshake() {
                     done
                     break
                 else
-                    echo -e "${RED}[!] No se detectó handshake en el archivo de captura.${NC}"
-                    # No borrarlo automáticamente por seguridad, preguntar
-                    read -p "¿Deseas limpiar estos archivos fallidos? (s/N): " clean_files
-                    if [[ "$clean_files" == "s" || "$clean_files" == "S" ]]; then
-                         rm -f "${full_cap_path}"*
-                         echo -e "${YELLOW}[*] Archivos eliminados.${NC}"
-                    fi
+                    echo -e "${RED}[!] El script no detectó automáticamente el handshake en el archivo.${NC}"
+                    echo -e "${YELLOW}[INFO] Sin embargo, el archivo se ha conservado por si acaso.${NC}"
+                    echo -e "${CYAN}      Ruta: $cap_to_check${NC}"
+                    echo ""
+                    echo -e "${YELLOW}Salida de comprobación (Aircrack-ng):${NC}"
+                    echo "----------------------------------------"
+                    echo "$check_output" | grep -i "WPA" | head -n 5
+                    echo "----------------------------------------"
+                    
                     read -p "Presiona Enter para volver al menú principal..."
                     return
                 fi
@@ -250,7 +259,7 @@ function capture_handshake() {
                 rm -f "/tmp/check_handshake_$$.cap"
                 
                 # Buscar si nuestro BSSID tiene handshake
-                if echo "$aircrack_output" | grep -F "$target_bssid_upper" | grep -qi "handshake"; then
+                if echo "$aircrack_output" | grep -F "$target_bssid_upper" | grep -qi "handshake" | grep -qv "0 handshake"; then
                     has_handshake=1
                 fi
                 
@@ -306,8 +315,8 @@ function capture_handshake() {
                     if [[ "$keep" =~ ^[sS]$ ]]; then
                         echo -e "${GREEN}[+] Archivo conservado en: $cap_to_check${NC}"
                     else
-                        echo -e "${YELLOW}[*] Eliminando captura fallida...${NC}"
-                        rm -f "${cap_path_base}"* 2>/dev/null
+                        echo -e "${YELLOW}[*] Archivo conservado en: $cap_to_check (verificación fallida)${NC}"
+                        # rm -f "${cap_path_base}"* 2>/dev/null
                     fi
                 fi
                 

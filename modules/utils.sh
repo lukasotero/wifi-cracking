@@ -29,10 +29,46 @@ function cleanup() {
         fi
     fi
     
-    # Limpiar archivos de captura incompletos si es necesario
+    # Verificar validez de captura antes de eliminar (SOLO BORRAR SI ES INVALIDO)
     if [ "$HANDSHAKE_CAPTURED" == "0" ] && [ ! -z "$full_cap_path" ]; then
-        echo -e "${YELLOW}[*] Eliminando archivos de captura abortada...${NC}"
-        rm -f "${full_cap_path}"*
+        # Buscar archivo .cap más reciente
+        # Debemos manejar -01.cap que airodump crea automáticamente
+        cap_candidates=$(ls -t "${full_cap_path}"*.cap 2>/dev/null | head -n 1)
+        
+        if [ ! -z "$cap_candidates" ] && [ -f "$cap_candidates" ]; then
+             echo -e "${YELLOW}[*] Verificando integridad de la captura interrumpida...${NC}"
+             
+             # Intentar verificar handshake
+             has_valid_handshake=0
+             check_out=$(aircrack-ng "$cap_candidates" 2>&1)
+             
+             if [ ! -z "$CURRENT_BSSID" ]; then
+                  target_check=$(echo "$CURRENT_BSSID" | tr '[:lower:]' '[:upper:]')
+                  if echo "$check_out" | grep -F "$target_check" | grep -qi "handshake" | grep -qv "0 handshake"; then
+                      has_valid_handshake=1
+                  fi
+             else
+                  # Fallback: Si por alguna razón no tenemos BSSID, cualquier handshake cuenta
+                  if echo "$check_out" | grep -qi "handshake" | grep -qv "0 handshake"; then
+                      has_valid_handshake=1
+                  fi
+             fi
+             
+             if [ "$has_valid_handshake" -eq 1 ]; then
+                 echo -e "${GREEN}[!!!] ¡Handshake VÁLIDO detectado en la captura interrumpida!${NC}"
+                 echo -e "${GREEN}[+] Archivo GUARDADO en: $cap_candidates${NC}"
+                 
+                 # Limpiar archivos auxiliares basura (.csv, .netxml) pero dejar el .cap
+                 rm -f "${full_cap_path}"-*.csv "${full_cap_path}"-*.kismet.csv "${full_cap_path}"-*.kismet.netxml "${full_cap_path}"-*.log.csv 2>/dev/null
+             else
+                 echo -e "${RED}[!] La captura interrumpida NO contiene un handshake válido.${NC}"
+                 echo -e "${YELLOW}[*] Eliminando archivos temporales inservibles...${NC}"
+                 rm -f "${full_cap_path}"* 2>/dev/null
+             fi
+        else
+            # Si no hay .cap, limpiar cualquier basura
+            rm -f "${full_cap_path}"* 2>/dev/null
+        fi
     fi
     echo -e "${YELLOW}[*] Restaurando servicios de red...${NC}"
     service NetworkManager restart
@@ -283,7 +319,7 @@ check_handshake_loop() {
             
             # Buscar si nuestro BSSID tiene handshake
             # Aircrack muestra: "1  AA:BB:CC:DD:EE:FF  NombreRed  WPA (1 handshake)"
-            if echo "$aircrack_output" | grep -F "$target_bssid" | grep -qi "handshake"; then
+            if echo "$aircrack_output" | grep -F "$target_bssid" | grep -qi "handshake" | grep -qv "0 handshake"; then
                 
                 # 1. Crear archivo de señal INMEDIATAMENTE
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"
