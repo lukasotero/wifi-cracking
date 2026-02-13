@@ -209,8 +209,25 @@ if [ -z "$CMD" ] || [ -z "$BSSID" ] || [ -z "$CAP_PATH" ]; then
     exit 1
 fi
 
-# Trap para manejar SIGTERM del monitor cuando se captura handshake
-trap 'exit 0' TERM
+# Función para manejar SIGTERM (enviado por monitor al capturar handshake)
+handle_sigterm() {
+    # Verificar si fue por handshake capturado
+    if [ -f "/tmp/handshake_captured_$$.flag" ]; then
+        clear
+        echo ""
+        echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
+        echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
+        echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
+        echo ""
+        echo -e "${CYAN}[*]${NC} Cerrando ventana..."
+        sleep 3
+        rm -f "/tmp/handshake_captured_$$.flag" 2>/dev/null
+    fi
+    exit 0
+}
+
+# Trap para manejar SIGTERM del monitor
+trap 'handle_sigterm' TERM
 
 echo -e "  ${YELLOW}Target:${NC} $BSSID"
 echo ""
@@ -271,26 +288,22 @@ check_handshake_loop() {
             if echo "$aircrack_output" | grep -qi "handshake"; then
                 echo "[$(date +%H:%M:%S)] ¡HANDSHAKE DETECTADO!" >> "$log_file"
                 
-                # Handshake detectado - matar airodump
-                echo "[$(date +%H:%M:%S)] Matando airodump..." >> "$log_file"
-                pkill -f "airodump-ng.*$bssid" 2>/dev/null
-                sleep 1
-                
-                # Si aún está vivo, usar kill más agresivo
-                if pgrep -f "airodump-ng.*$bssid" > /dev/null; then
-                    echo "[$(date +%H:%M:%S)] Airodump aún vivo, usando kill -9..." >> "$log_file"
-                    pkill -9 -f "airodump-ng.*$bssid" 2>/dev/null
-                    sleep 1
-                fi
-                
-                # Crear archivo de señal
-                echo "[$(date +%H:%M:%S)] Creando archivo de señal..." >> "$log_file"
+                # 1. Crear archivo de señal INMEDIATAMENTE
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"
+                echo "[$(date +%H:%M:%S)] Señal creada" >> "$log_file"
+
+                # 2. Intentar matar airodump específico
+                pkill -f "airodump-ng.*$bssid" 2>/dev/null
                 
-                echo "[$(date +%H:%M:%S)] Handshake capturado, airodump muerto, señal creada" >> "$log_file"
-                echo "[$(date +%H:%M:%S)] El script principal detectará la señal y cerrará" >> "$log_file"
+                # 3. Fallback: Matar cualquier airodump (medida de seguridad)
+                killall airodump-ng 2>/dev/null
                 
-                # Terminar el monitor
+                # 4. ENVIAR SEÑAL DE TERMINACIÓN AL WRAPPER PRINCIPAL
+                # Esto es lo que cerrará la ventana
+                echo "[$(date +%H:%M:%S)] Enviando SIGTERM al wrapper ($wrapper_pid)..." >> "$log_file"
+                kill -TERM "$wrapper_pid" 2>/dev/null
+                
+                # 5. Salir del monitor
                 exit 0
             else
                 echo "[$(date +%H:%M:%S)] No se detectó handshake" >> "$log_file"
