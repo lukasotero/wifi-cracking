@@ -204,6 +204,19 @@ echo ""
 eval "$CMD" &
 AIRODUMP_PID=$!
 
+# Esperar a que airodump inicie correctamente
+sleep 2
+
+# Verificar que el proceso sigue vivo después del inicio
+if ! kill -0 $AIRODUMP_PID 2>/dev/null; then
+    echo ""
+    echo -e "${RED}[!] Error: airodump-ng no pudo iniciarse correctamente${NC}"
+    echo -e "${YELLOW}[*] Verifica que la interfaz esté en modo monitor${NC}"
+    echo -e "${YELLOW}[*] Esta ventana se cerrará en 10 segundos...${NC}"
+    sleep 10
+    exit 1
+fi
+
 # Función para verificar handshake
 check_handshake() {
     local cap_file=""
@@ -215,8 +228,10 @@ check_handshake() {
         cap_file="${CAP_PATH}.cap"
     fi
     
-    if [ ! -z "$cap_file" ] && [ -f "$cap_file" ]; then
-        if aircrack-ng -b "$BSSID" "$cap_file" 2>&1 | grep -q "1 handshake"; then
+    # Verificar que el archivo existe y tiene contenido
+    if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
+        # Usar timeout para evitar que aircrack se quede colgado
+        if timeout 5 aircrack-ng -b "$BSSID" "$cap_file" 2>&1 | grep -q "1 handshake"; then
             return 0
         fi
     fi
@@ -224,41 +239,52 @@ check_handshake() {
 }
 
 # Monitoreo continuo
-echo -e "${CYAN}[*] Monitoreando captura... (verificando cada 3 segundos)${NC}"
+echo -e "${CYAN}[*] Monitoreando captura...${NC}"
+echo -e "${CYAN}[*] Esperando 10 segundos antes de verificar handshake...${NC}"
 COUNTER=0
+MIN_WAIT=3  # Mínimo 3 verificaciones (9 segundos) antes de empezar a buscar handshake
 
-while kill -0 $AIRODUMP_PID 2>/dev/null; do
+while true; do
     sleep 3
     COUNTER=$((COUNTER + 1))
     
-    # Mostrar indicador de actividad cada 3 segundos
-    echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Verificando handshake... (intento #$COUNTER)\r"
+    # Verificar si el proceso sigue vivo
+    if ! kill -0 $AIRODUMP_PID 2>/dev/null; then
+        echo ""
+        echo -e "${RED}[!] El proceso airodump-ng se detuvo inesperadamente${NC}"
+        echo -e "${YELLOW}[*] Esto puede deberse a un problema con la interfaz${NC}"
+        echo -e "${YELLOW}[*] Esta ventana se cerrará en 10 segundos...${NC}"
+        sleep 10
+        exit 1
+    fi
     
-    if check_handshake; then
-        echo ""
-        echo ""
-        echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
-        echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                ${GREEN}│${NC}"
-        echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
-        echo ""
-        echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
+    # Mostrar indicador de actividad
+    if [ $COUNTER -lt $MIN_WAIT ]; then
+        echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Capturando tráfico... (espera inicial $COUNTER/$MIN_WAIT)\r"
+    else
+        echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Verificando handshake... (intento #$((COUNTER - MIN_WAIT + 1)))\r"
         
-        # Matar proceso de airodump
-        kill $AIRODUMP_PID 2>/dev/null
-        wait $AIRODUMP_PID 2>/dev/null
-        
-        echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
-        echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
-        sleep 3
-        exit 0
+        # Solo verificar handshake después del tiempo mínimo de espera
+        if check_handshake; then
+            echo ""
+            echo ""
+            echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
+            echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                ${GREEN}│${NC}"
+            echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
+            echo ""
+            echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
+            
+            # Matar proceso de airodump
+            kill $AIRODUMP_PID 2>/dev/null
+            wait $AIRODUMP_PID 2>/dev/null
+            
+            echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
+            echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
+            sleep 3
+            exit 0
+        fi
     fi
 done
-
-# Si el proceso terminó sin capturar handshake
-echo ""
-echo -e "${RED}[!] El proceso de captura finalizó.${NC}"
-echo -e "${YELLOW}[*] Esta ventana se cerrará en 5 segundos...${NC}"
-sleep 5
 WRAPPER_EOF
 
     chmod +x "$wrapper_script"
