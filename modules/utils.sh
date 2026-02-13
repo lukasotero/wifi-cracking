@@ -237,21 +237,6 @@ function ensure_mon_interface() {
     read -p "Ingresa el nombre de la interfaz en modo monitor (ej. wlan0mon): " mon_interface
 }
 
-function start_monitor_mode() {
-    ensure_mon_interface
-    
-    read -p "¿Deseas cambiar tu MAC a una aleatoria? (s/n): " ch_mac
-    if [[ "$ch_mac" == "s" || "$ch_mac" == "S" ]]; then
-        echo -e "${YELLOW}[*] Cambiando dirección MAC...${NC}"
-        ifconfig "$mon_interface" down
-        macchanger -r "$mon_interface"
-        ifconfig "$mon_interface" up
-    fi
-}
 
-function stop_monitor_mode() {
-    banner
-    read -p "Ingresa el nombre de la interfaz en modo monitor a detener (ej. wlan0mon): " mon_interface
-    # La limpieza real se hará en el trap al salir
-    exit 0
-}
+
+

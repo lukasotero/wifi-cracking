@@ -31,13 +31,12 @@ check_dependencies
 while true; do
     banner
     echo -e "${YELLOW}╔══════════════════ ATTACK MENU ═══════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque WPA/WPA2 Clásico (Handshake)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque WPS (Pixie Dust)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Ataque PMKID (Client-less)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque WPA/WPA2 clásico (handshake)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque WPS (pixie dust)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Ataque PMKID (client-less)"
     echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Herramientas Extra (Crackear, Tests)"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Detener Modo Monitor y Salir"
-    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 6) Salir"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Herramientas"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Salir"
     echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     read -p "Selecciona una opción: " option
@@ -47,8 +46,7 @@ while true; do
         2) wps_attack ;;
         3) pmkid_attack ;;
         4) extra_tools_menu ;;
-        5) exit 0 ;; # El trap manejará la detención
-        6) exit 0 ;;
+        5) exit 0 ;;
         *) echo -e "${RED}Opción inválida${NC}"; sleep 1 ;;
     esac
 done
