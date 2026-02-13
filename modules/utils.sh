@@ -200,91 +200,78 @@ echo ""
 echo -e "${YELLOW}[*]${NC} Iniciando airodump-ng..."
 echo ""
 
-# Ejecutar airodump en background
-eval "$CMD" &
-AIRODUMP_PID=$!
+# Función para verificar handshake en background
+check_handshake_loop() {
+    local bssid="$1"
+    local cap_path="$2"
+    local min_wait=3
+    local counter=0
+    
+    # Espera inicial antes de empezar a verificar
+    sleep 9
+    
+    while true; do
+        sleep 3
+        counter=$((counter + 1))
+        
+        # Buscar archivo de captura
+        local cap_file=""
+        if [ -f "${cap_path}-01.cap" ]; then
+            cap_file="${cap_path}-01.cap"
+        elif [ -f "${cap_path}.cap" ]; then
+            cap_file="${cap_path}.cap"
+        fi
+        
+        # Verificar handshake si existe el archivo
+        if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
+            if timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1 | grep -q "1 handshake"; then
+                # Handshake detectado - matar airodump
+                pkill -P $$ airodump-ng 2>/dev/null
+                sleep 1
+                
+                # Mostrar mensaje de éxito
+                clear
+                echo ""
+                echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
+                echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
+                echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
+                echo ""
+                echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
+                echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
+                echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
+                sleep 3
+                exit 0
+            fi
+        fi
+    done
+}
 
-# Esperar a que airodump inicie correctamente
-sleep 2
+# Iniciar monitoreo de handshake en background
+check_handshake_loop "$BSSID" "$CAP_PATH" &
+MONITOR_PID=$!
 
-# Verificar que el proceso sigue vivo después del inicio
-if ! kill -0 $AIRODUMP_PID 2>/dev/null; then
+# Ejecutar airodump en FOREGROUND (para que se vea la salida)
+eval "$CMD"
+AIRODUMP_EXIT=$?
+
+# Si airodump termina, matar el monitor
+kill $MONITOR_PID 2>/dev/null
+
+# Verificar por qué terminó airodump
+if [ $AIRODUMP_EXIT -ne 0 ]; then
     echo ""
-    echo -e "${RED}[!] Error: airodump-ng no pudo iniciarse correctamente${NC}"
+    echo -e "${RED}[!] Error: airodump-ng terminó con código de error $AIRODUMP_EXIT${NC}"
     echo -e "${YELLOW}[*] Verifica que la interfaz esté en modo monitor${NC}"
     echo -e "${YELLOW}[*] Esta ventana se cerrará en 10 segundos...${NC}"
     sleep 10
     exit 1
 fi
 
-# Función para verificar handshake
-check_handshake() {
-    local cap_file=""
-    
-    # Buscar archivo de captura
-    if [ -f "${CAP_PATH}-01.cap" ]; then
-        cap_file="${CAP_PATH}-01.cap"
-    elif [ -f "${CAP_PATH}.cap" ]; then
-        cap_file="${CAP_PATH}.cap"
-    fi
-    
-    # Verificar que el archivo existe y tiene contenido
-    if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
-        # Usar timeout para evitar que aircrack se quede colgado
-        if timeout 5 aircrack-ng -b "$BSSID" "$cap_file" 2>&1 | grep -q "1 handshake"; then
-            return 0
-        fi
-    fi
-    return 1
-}
-
-# Monitoreo continuo
-echo -e "${CYAN}[*] Monitoreando captura...${NC}"
-echo -e "${CYAN}[*] Esperando 10 segundos antes de verificar handshake...${NC}"
-COUNTER=0
-MIN_WAIT=3  # Mínimo 3 verificaciones (9 segundos) antes de empezar a buscar handshake
-
-while true; do
-    sleep 3
-    COUNTER=$((COUNTER + 1))
-    
-    # Verificar si el proceso sigue vivo
-    if ! kill -0 $AIRODUMP_PID 2>/dev/null; then
-        echo ""
-        echo -e "${RED}[!] El proceso airodump-ng se detuvo inesperadamente${NC}"
-        echo -e "${YELLOW}[*] Esto puede deberse a un problema con la interfaz${NC}"
-        echo -e "${YELLOW}[*] Esta ventana se cerrará en 10 segundos...${NC}"
-        sleep 10
-        exit 1
-    fi
-    
-    # Mostrar indicador de actividad
-    if [ $COUNTER -lt $MIN_WAIT ]; then
-        echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Capturando tráfico... (espera inicial $COUNTER/$MIN_WAIT)\r"
-    else
-        echo -ne "${YELLOW}[$(date +%H:%M:%S)]${NC} Verificando handshake... (intento #$((COUNTER - MIN_WAIT + 1)))\r"
-        
-        # Solo verificar handshake después del tiempo mínimo de espera
-        if check_handshake; then
-            echo ""
-            echo ""
-            echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
-            echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
-            echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
-            echo ""
-            echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
-            
-            # Matar proceso de airodump
-            kill $AIRODUMP_PID 2>/dev/null
-            wait $AIRODUMP_PID 2>/dev/null
-            
-            echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
-            echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
-            sleep 3
-            exit 0
-        fi
-    fi
-done
+# Si llegamos aquí, airodump terminó normalmente (usuario presionó Ctrl+C)
+echo ""
+echo -e "${YELLOW}[*] Captura detenida por el usuario${NC}"
+echo -e "${YELLOW}[*] Esta ventana se cerrará en 3 segundos...${NC}"
+sleep 3
 WRAPPER_EOF
 
     chmod +x "$wrapper_script"
