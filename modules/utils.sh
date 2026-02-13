@@ -252,13 +252,22 @@ check_handshake_loop() {
         
         # Verificar handshake si existe el archivo
         if [ ! -z "$cap_file" ] && [ -f "$cap_file" ] && [ -s "$cap_file" ]; then
-            echo "[$(date +%H:%M:%S)] Archivo existe y no está vacío, verificando handshake..." >> "$log_file"
+            # SINCRONIZAR DISCO Y TRABAJAR SOBRE COPIA
+            # Esto evita problemas de lectura en archivos abiertos
+            sync
+            cp -f "$cap_file" "/tmp/check_$wrapper_pid.cap" 2>/dev/null
             
-            # Ejecutar aircrack-ng y capturar output
-            local aircrack_output=$(timeout 5 aircrack-ng -b "$bssid" "$cap_file" 2>&1)
+            echo "[$(date +%H:%M:%S)] Verificando copia temporal: /tmp/check_$wrapper_pid.cap" >> "$log_file"
+            
+            # Ejecutar aircrack-ng sobre la copia
+            local aircrack_output=$(timeout 5 aircrack-ng -b "$bssid" "/tmp/check_$wrapper_pid.cap" 2>&1)
+            
+            # Limpiar copia
+            rm -f "/tmp/check_$wrapper_pid.cap" 2>/dev/null
+            
             echo "$aircrack_output" >> "$log_file"
             
-            # Buscar handshake de múltiples formas
+            # Buscar handshake de múltiples formas (case-insensitive)
             if echo "$aircrack_output" | grep -qi "handshake"; then
                 echo "[$(date +%H:%M:%S)] ¡HANDSHAKE DETECTADO!" >> "$log_file"
                 
