@@ -209,6 +209,9 @@ if [ -z "$CMD" ] || [ -z "$BSSID" ] || [ -z "$CAP_PATH" ]; then
     exit 1
 fi
 
+# Trap para manejar SIGTERM del monitor cuando se captura handshake
+trap 'exit 0' TERM
+
 echo -e "  ${YELLOW}Target:${NC} $BSSID"
 echo ""
 echo -e "  ${CYAN}ℹ${NC}  Esta ventana se cerrará automáticamente al capturar"
@@ -224,6 +227,7 @@ check_handshake_loop() {
     local cap_path="$2"
     local min_wait=3
     local counter=0
+    local wrapper_pid=$$
     
     # Espera inicial antes de empezar a verificar
     sleep 9
@@ -254,7 +258,7 @@ check_handshake_loop() {
                 fi
                 
                 # Crear archivo de señal para indicar que se capturó
-                touch "/tmp/handshake_captured_$$.flag"
+                touch "/tmp/handshake_captured_$wrapper_pid.flag"
                 
                 # Mostrar mensaje de éxito
                 clear
@@ -267,6 +271,10 @@ check_handshake_loop() {
                 echo -e "${GREEN}[+]${NC} Proceso finalizado correctamente"
                 echo -e "${CYAN}[*]${NC} Esta ventana se cerrará en 3 segundos..."
                 sleep 3
+                
+                # Terminar TODO el script wrapper (no solo esta función)
+                # Enviar SIGTERM al proceso padre (el script wrapper completo)
+                kill -TERM $wrapper_pid 2>/dev/null
                 exit 0
             fi
         fi
@@ -284,6 +292,15 @@ AIRODUMP_EXIT=$?
 
 # Si airodump termina, matar el monitor
 kill $MONITOR_PID 2>/dev/null
+wait $MONITOR_PID 2>/dev/null
+
+# Verificar si el monitor capturó el handshake
+if [ -f "/tmp/handshake_captured_$$.flag" ]; then
+    # El handshake fue capturado - el monitor ya mostró el mensaje de éxito
+    # Solo limpiar y salir
+    rm -f "/tmp/handshake_captured_$$.flag" 2>/dev/null
+    exit 0
+fi
 
 # Verificar por qué terminó airodump
 if [ $AIRODUMP_EXIT -ne 0 ]; then
