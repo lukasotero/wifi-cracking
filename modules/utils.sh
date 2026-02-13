@@ -32,6 +32,12 @@ function cleanup() {
              airmon-ng stop "$mon_interface" > /dev/null 2>&1
         fi
     fi
+    
+    # Limpiar archivos de captura incompletos si es necesario
+    if [ "$HANDSHAKE_CAPTURED" == "0" ] && [ ! -z "$full_cap_path" ]; then
+        echo -e "${YELLOW}[*] Eliminando archivos de captura abortada...${NC}"
+        rm -f "${full_cap_path}"*
+    fi
     echo -e "${YELLOW}[*] Restaurando servicios de red...${NC}"
     service NetworkManager restart
     echo -e "${GREEN}[+] Salida limpia completada.${NC}"

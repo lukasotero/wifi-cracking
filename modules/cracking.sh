@@ -188,3 +188,36 @@ function crack_password() {
     esac
     read -p "Presiona Enter para continuar..."
 }
+
+function convert_cap_to_hc22000() {
+    banner
+    echo -e "${YELLOW}[*] Conversor .cap -> .hc22000 (Hashcat)${NC}"
+    
+    # 1. Verificar herramienta
+    if ! command -v hcxpcapngtool &> /dev/null; then
+        echo -e "${RED}[!] La herramienta 'hcxpcapngtool' no está instalada.${NC}"
+        echo -e "${YELLOW}[INFO] Instala 'hcxtools' para usar esta función.${NC}"
+        read -p "Presiona Enter para volver..."
+        return
+    fi
+    
+    # 2. Seleccionar archivo .cap
+    while true; do
+        read -p "Ingresa la ruta del archivo .cap: " cap_file
+        if [ -f "$cap_file" ]; then break; else echo -e "${RED}[!] Archivo no encontrado.${NC}"; fi
+    done
+    
+    local output_hc="${cap_file%.*}.hc22000"
+    echo -e "${YELLOW}[*] Convirtiendo...${NC}"
+    
+    hcxpcapngtool -o "$output_hc" "$cap_file"
+    
+    if [ -f "$output_hc" ]; then
+        echo -e "${GREEN}[+] Conversión completada exitosamente.${NC}"
+        echo -e "${GREEN}[+] Archivo guardado en: $output_hc${NC}"
+    else
+        echo -e "${RED}[!] Error durante la conversión. Verifica que el .cap sea válido.${NC}"
+    fi
+    
+    read -p "Presiona Enter para continuar..."
+}

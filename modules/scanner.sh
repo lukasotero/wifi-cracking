@@ -1,15 +1,11 @@
 #!/bin/bash
 
-# ==============================================================================
-# SCANNER MODULE
-# ==============================================================================
-
 function show_target_selection_menu() {
     local source_file="$1"
     
-    echo -e "\n${YELLOW}╔════╤═══════════════════╤════╤═════════╤══════════╤══════════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} %-7s ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-20s ${YELLOW}║${NC}\n" "ID" "BSSID" "CH" "PWR" "SEC" "ESSID"
-    echo -e "${YELLOW}╠════╪═══════════════════╪════╪═════════╪══════════╪══════════════════════╣${NC}"
+    echo -e "\n${YELLOW}╔════╤═══════════════════╤════╤═════════╤══════════╤══════════════════════════════╗${NC}"
+    printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} %-7s ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-28s ${YELLOW}║${NC}\n" "ID" "BSSID" "CH" "PWR" "SEC" "ESSID"
+    echo -e "${YELLOW}╠════╪═══════════════════╪════╪═════════╪══════════╪══════════════════════════════╣${NC}"
     
     local -a bssids
     local -a channels
@@ -28,12 +24,12 @@ function show_target_selection_menu() {
              if [[ "$pwr" -lt -70 ]]; then pwr_color="${YELLOW}"; fi
              if [[ "$pwr" -lt -85 ]]; then pwr_color="${RED}"; fi
              
-             printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} ${pwr_color}%-7s${NC} ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-20.20s ${YELLOW}║${NC}\n" "$i" "$bssid" "$channel" "$pwr" "$security" "$essid"
+             printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} ${pwr_color}%-7s${NC} ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-28.28s ${YELLOW}║${NC}\n" "$i" "$bssid" "$channel" "$pwr" "$security" "$essid"
              ((i++))
         fi
     done < "$source_file"
     
-    echo -e "${YELLOW}╚════╧═══════════════════╧════╧═════════╧══════════╧══════════════════════╝${NC}"
+    echo -e "${YELLOW}╚════╧═══════════════════╧════╧═════════╧══════════╧══════════════════════════════╝${NC}"
     
     echo ""
     echo "0) Entrada Manual o Re-escanear"
@@ -108,8 +104,10 @@ function start_scan_and_selection() {
             if(length(essid)==0) essid="<Oculta>";
             if(length(priv)==0) priv="OPEN";
             
-            # Formato: BSSID|CHANNEL|ESSID|POWER|SECURITY
-            if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
+            # Filtros: Ocultas y Open
+            if(length(essid)>0 && essid!="<Oculta>" && priv!="OPEN") {
+               if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
+            }
         }' "$csv_file" | sort -t'|' -k4 -nr > "$formatted_list"
     fi
     
