@@ -8,6 +8,12 @@ function capture_handshake() {
     export HANDSHAKE_CAPTURED=0
     export full_cap_path=""
     
+    # Variables locales
+    local bssid=""
+    local channel=""
+    local default_name=""
+    local filename=""
+    
     # Escaneo modular
     start_scan_and_selection "airodump"
     if [ $? -eq 0 ]; then
@@ -18,9 +24,33 @@ function capture_handshake() {
         if [ -z "$filename" ]; then filename="$default_name"; fi
     else
         echo -e "${YELLOW}[!] Pasando a modo manual...${NC}"
-        read -p "Ingresa el BSSID del objetivo: " bssid
-        read -p "Ingresa el CANAL del objetivo: " channel
+        
+        # Validar BSSID
+        while true; do
+            read -p "Ingresa el BSSID del objetivo (XX:XX:XX:XX:XX:XX): " bssid
+            if [[ "$bssid" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
+                break
+            else
+                echo -e "${RED}[!] BSSID inválido. Formato: XX:XX:XX:XX:XX:XX${NC}"
+            fi
+        done
+        
+        # Validar Canal
+        while true; do
+            read -p "Ingresa el CANAL del objetivo (1-14): " channel
+            if [[ "$channel" =~ ^[0-9]+$ ]] && [ "$channel" -ge 1 ] && [ "$channel" -le 14 ]; then
+                break
+            else
+                echo -e "${RED}[!] Canal inválido. Debe ser un número entre 1 y 14${NC}"
+            fi
+        done
+        
+        # Nombre de archivo
         read -p "Ingresa un nombre para el archivo de captura: " filename
+        if [ -z "$filename" ]; then 
+            filename="handshake_$(date +%s)"
+        fi
+        default_name="$filename"
     fi
     
     full_cap_path="$WORK_DIR/$filename"
@@ -29,12 +59,13 @@ function capture_handshake() {
     rm -f "${full_cap_path}"*
     
     echo -e "${YELLOW}[*] Iniciando captura en canal $channel...${NC}"
+    echo -e "${CYAN}[*] Target: $bssid (Canal $channel)${NC}"
     
     airodump_cmd="airodump-ng -c $channel --bssid $bssid -w $full_cap_path $mon_interface"
     run_in_new_terminal "$airodump_cmd" "Capturando Handshake - $bssid" "$bssid" "$full_cap_path"
 
     
-    echo -e "${YELLOW}[*] Esperando 5 segundos...${NC}"
+    echo -e "${YELLOW}[*] Esperando 5 segundos para que inicie la captura...${NC}"
     sleep 5
     
     while true; do
@@ -63,30 +94,51 @@ function capture_handshake() {
         echo ""
         read -p "  → Opción: " hs_opt
         
-        # Verificar estado de captura (intentar -01.cap y el nombre base)
-        cap_to_check=""
-        if [ -f "${full_cap_path}-01.cap" ]; then
-            cap_to_check="${full_cap_path}-01.cap"
-        elif [ -f "${full_cap_path}.cap" ]; then
-            cap_to_check="${full_cap_path}.cap"
-        fi
-
-        if [ ! -z "$cap_to_check" ] && aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
-             echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE ${NC}"
-             export HANDSHAKE_CAPTURED=1
-             pkill -f "airodump-ng.*$bssid"
-             
-             # Renombrar archivo final al nombre deseado (sin -01) para guardarlo limpio
-             if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
-                 mv "$cap_to_check" "${full_cap_path}.cap"
-                 cap_to_check="${full_cap_path}.cap"
-             fi
-             
-             read -p "¿Crackear ahora? (s/n): " crack_now
-             if [[ "$crack_now" == "s" || "$crack_now" == "S" ]]; then
-                 crack_password_auto "$cap_to_check" "$bssid"
-             fi
-             break
+        # Verificar si el proceso de captura sigue activo
+        if ! pgrep -f "airodump-ng.*$bssid" > /dev/null; then
+            echo ""
+            echo -e "${YELLOW}[!] La captura se detuvo.${NC}"
+            echo -e "${YELLOW}[*] Verificando si se capturó el handshake...${NC}"
+            
+            # Buscar archivo de captura
+            cap_to_check=""
+            if [ -f "${full_cap_path}-01.cap" ]; then
+                cap_to_check="${full_cap_path}-01.cap"
+            elif [ -f "${full_cap_path}.cap" ]; then
+                cap_to_check="${full_cap_path}.cap"
+            fi
+            
+            # Verificar handshake si existe el archivo
+            if [ ! -z "$cap_to_check" ] && [ -s "$cap_to_check" ]; then
+                if timeout 10 aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
+                    echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE${NC}"
+                    export HANDSHAKE_CAPTURED=1
+                    
+                    # Renombrar archivo final al nombre deseado (sin -01) para guardarlo limpio
+                    if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
+                        mv "$cap_to_check" "${full_cap_path}.cap"
+                        cap_to_check="${full_cap_path}.cap"
+                    fi
+                    
+                    echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
+                    echo ""
+                    read -p "¿Crackear ahora? (s/n): " crack_now
+                    if [[ "$crack_now" == "s" || "$crack_now" == "S" ]]; then
+                        crack_password_auto "$cap_to_check" "$bssid"
+                    fi
+                    break
+                else
+                    echo -e "${RED}[!] No se detectó handshake en el archivo de captura.${NC}"
+                    echo -e "${YELLOW}[*] Eliminando archivos incompletos...${NC}"
+                    rm -f "${full_cap_path}"*
+                    read -p "Presiona Enter para volver al menú principal..."
+                    return
+                fi
+            else
+                echo -e "${RED}[!] No se encontró archivo de captura válido.${NC}"
+                read -p "Presiona Enter para volver al menú principal..."
+                return
+            fi
         fi
         
         case $hs_opt in

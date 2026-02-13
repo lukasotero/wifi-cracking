@@ -47,8 +47,8 @@ function banner() {
     clear
     echo -e "${GREEN}"
     echo "  ╭─────────────────────────────────────────────────────╮"
-    echo "  │  WiFi Cracking Automation Toolkit                  │"
-    echo "  │  Dev by: Lukas Otero                               │"
+    echo "  │  WiFi Cracking Automation Toolkit                   │"
+    echo "  │  Dev by: Lukas Otero                                │"
     echo "  ╰─────────────────────────────────────────────────────╯"
     echo -e "${NC}"
 }
@@ -188,7 +188,7 @@ CAP_PATH="$3"
 clear
 echo ""
 echo -e "${CYAN}  ╭─────────────────────────────────────────────────────╮${NC}"
-echo -e "${CYAN}  │${NC}  ${GREEN}●${NC} Captura de Handshake en Progreso               ${CYAN}│${NC}"
+echo -e "${CYAN}  │${NC}  ${GREEN}●${NC} Captura de Handshake en Progreso                ${CYAN}│${NC}"
 echo -e "${CYAN}  ╰─────────────────────────────────────────────────────╯${NC}"
 echo ""
 echo -e "  ${YELLOW}Target:${NC} $BSSID"
@@ -269,7 +269,7 @@ while true; do
             echo ""
             echo ""
             echo -e "${GREEN}  ╭─────────────────────────────────────────────────────╮${NC}"
-            echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                ${GREEN}│${NC}"
+            echo -e "${GREEN}  │${NC}  ${GREEN}✓${NC} Handshake Capturado Exitosamente                 ${GREEN}│${NC}"
             echo -e "${GREEN}  ╰─────────────────────────────────────────────────────╯${NC}"
             echo ""
             echo -e "${YELLOW}[*]${NC} Deteniendo captura..."
