@@ -225,9 +225,9 @@ echo ""
 check_handshake_loop() {
     local bssid="$1"
     local cap_path="$2"
+    local wrapper_pid="$3"  # Recibir PID como parámetro
     local min_wait=3
     local counter=0
-    local wrapper_pid=$$
     
     # Espera inicial antes de empezar a verificar
     sleep 9
@@ -282,8 +282,11 @@ check_handshake_loop() {
 }
 
 
+# Capturar PID del wrapper ANTES de lanzar función en background
+WRAPPER_PID=$$
+
 # Iniciar monitoreo de handshake en background
-check_handshake_loop "$BSSID" "$CAP_PATH" &
+check_handshake_loop "$BSSID" "$CAP_PATH" "$WRAPPER_PID" &
 MONITOR_PID=$!
 
 # Ejecutar airodump en FOREGROUND (para que se vea la salida)
@@ -295,10 +298,10 @@ kill $MONITOR_PID 2>/dev/null
 wait $MONITOR_PID 2>/dev/null
 
 # Verificar si el monitor capturó el handshake
-if [ -f "/tmp/handshake_captured_$$.flag" ]; then
+if [ -f "/tmp/handshake_captured_$WRAPPER_PID.flag" ]; then
     # El handshake fue capturado - el monitor ya mostró el mensaje de éxito
     # Solo limpiar y salir
-    rm -f "/tmp/handshake_captured_$$.flag" 2>/dev/null
+    rm -f "/tmp/handshake_captured_$WRAPPER_PID.flag" 2>/dev/null
     exit 0
 fi
 
