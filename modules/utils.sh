@@ -191,6 +191,24 @@ echo -e "${CYAN}  ╭───────────────────�
 echo -e "${CYAN}  │${NC}  ${GREEN}●${NC} Captura de Handshake en Progreso                ${CYAN}│${NC}"
 echo -e "${CYAN}  ╰─────────────────────────────────────────────────────╯${NC}"
 echo ""
+
+# Leer parámetros desde variables de entorno
+CMD="$AIRODUMP_CMD"
+BSSID="$AIRODUMP_BSSID"
+CAP_PATH="$AIRODUMP_CAP_PATH"
+
+# DEBUG: Verificar parámetros recibidos
+if [ -z "$CMD" ] || [ -z "$BSSID" ] || [ -z "$CAP_PATH" ]; then
+    echo -e "${RED}[!] ERROR: Variables de entorno faltantes${NC}"
+    echo "AIRODUMP_CMD: '$CMD'"
+    echo "AIRODUMP_BSSID: '$BSSID'"
+    echo "AIRODUMP_CAP_PATH: '$CAP_PATH'"
+    echo ""
+    echo -e "${YELLOW}[*] Presiona Enter para cerrar...${NC}"
+    read
+    exit 1
+fi
+
 echo -e "  ${YELLOW}Target:${NC} $BSSID"
 echo ""
 echo -e "  ${CYAN}ℹ${NC}  Esta ventana se cerrará automáticamente al capturar"
@@ -262,42 +280,48 @@ if [ $AIRODUMP_EXIT -ne 0 ]; then
     echo ""
     echo -e "${RED}[!] Error: airodump-ng terminó con código de error $AIRODUMP_EXIT${NC}"
     echo -e "${YELLOW}[*] Verifica que la interfaz esté en modo monitor${NC}"
-    echo -e "${YELLOW}[*] Esta ventana se cerrará en 10 segundos...${NC}"
-    sleep 10
+    echo ""
+    echo -e "${YELLOW}[*] Presiona Enter para cerrar...${NC}"
+    read
     exit 1
 fi
 
 # Si llegamos aquí, airodump terminó normalmente (usuario presionó Ctrl+C)
 echo ""
 echo -e "${YELLOW}[*] Captura detenida por el usuario${NC}"
-echo -e "${YELLOW}[*] Esta ventana se cerrará en 3 segundos...${NC}"
-sleep 3
+echo -e "${YELLOW}[*] Presiona Enter para cerrar...${NC}"
+read
 WRAPPER_EOF
 
     chmod +x "$wrapper_script"
     
-    # Construir comando completo con el wrapper
-    local full_cmd="$wrapper_script '$cmd' '$bssid' '$cap_path'"
+    # Exportar parámetros como variables de entorno para evitar problemas de escape
+    export AIRODUMP_CMD="$cmd"
+    export AIRODUMP_BSSID="$bssid"
+    export AIRODUMP_CAP_PATH="$cap_path"
+    
+    # El wrapper leerá las variables de entorno directamente
+    local full_cmd="$wrapper_script"
     
     # Intentar detectar emuladores de terminal comunes en Kali/Linux
     if command -v x-terminal-emulator > /dev/null 2>&1; then
-        x-terminal-emulator -e "bash -c '$full_cmd'" &
+        x-terminal-emulator -e "$wrapper_script" &
     elif command -v qterminal > /dev/null 2>&1; then
-        qterminal -e "bash -c '$full_cmd'" &
+        qterminal -e "$wrapper_script" &
     elif command -v gnome-terminal > /dev/null 2>&1; then
-        gnome-terminal -- bash -c "$full_cmd" &
+        gnome-terminal -- "$wrapper_script" &
     elif command -v xfce4-terminal > /dev/null 2>&1; then
-        xfce4-terminal -e "bash -c '$full_cmd'" &
+        xfce4-terminal -e "$wrapper_script" &
     elif command -v xterm > /dev/null 2>&1; then
-        xterm -title "$title" -e "bash -c '$full_cmd'" &
+        xterm -title "$title" -e "$wrapper_script" &
     else
         echo -e "${RED}[!] No se pudo abrir una nueva terminal automáticamente.${NC}"
         echo -e "${YELLOW}[*] Ejecutando en segundo plano (background)...${NC}"
         eval "$cmd" &
     fi
     
-    # Limpiar script wrapper después de 2 segundos (dar tiempo a que se ejecute)
-    (sleep 2; rm -f "$wrapper_script" 2>/dev/null) &
+    # Limpiar script wrapper después de 10 segundos (dar tiempo suficiente)
+    (sleep 10; rm -f "$wrapper_script" 2>/dev/null) &
 }
 
 function get_wireless_interfaces() {
