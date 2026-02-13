@@ -15,6 +15,25 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Función de limpieza (Trap)
+function cleanup() {
+    echo ""
+    echo -e "${YELLOW}[*] Interrupción detectada. Limpiando...${NC}"
+    if [ ! -z "$mon_interface" ]; then
+        if iw dev "$mon_interface" info 2>/dev/null | grep -q "type monitor"; then
+             echo -e "${YELLOW}[*] Deteniendo modo monitor en $mon_interface...${NC}"
+             airmon-ng stop "$mon_interface" > /dev/null 2>&1
+        fi
+    fi
+    echo -e "${YELLOW}[*] Restaurando servicios de red...${NC}"
+    service NetworkManager restart
+    echo -e "${GREEN}[+] Salida limpia completada.${NC}"
+    exit 0
+}
+
+# Capturar señales de salida (Ctrl+C, Exit)
+trap cleanup SIGINT EXIT
+
 function check_dependencies() {
     clear
     echo -e "${YELLOW}[*] Verificando dependencias del sistema...${NC}"
@@ -220,12 +239,9 @@ function start_monitor_mode() {
 function stop_monitor_mode() {
     banner
     read -p "Ingresa el nombre de la interfaz en modo monitor a detener (ej. wlan0mon): " mon_interface
-    echo -e "${YELLOW}[*] Deteniendo modo monitor...${NC}"
-    airmon-ng stop "$mon_interface"
-    echo -e "${GREEN}[+] Modo monitor detenido.${NC}"
-    echo -e "${YELLOW}[*] Reiniciando NetworkManager...${NC}"
-    service NetworkManager restart
-    read -p "Presiona Enter para continuar..."
+    # La limpieza real se hará en el trap al salir, o podemos forzarla aquí.
+    # Para ser consistentes con la opción de menú "Detener y Salir", simplemente salimos y dejamos que el trap actúe.
+    exit 0
 }
 
 function scan_networks() {
@@ -816,7 +832,7 @@ while true; do
         2) wps_attack ;;
         3) pmkid_attack ;;
         4) extra_tools_menu ;;
-        5) stop_monitor_mode; exit 0 ;;
+        5) exit 0 ;; # El trap manejará la detención
         6) exit 0 ;;
         *) echo -e "${RED}Opción inválida${NC}"; sleep 1 ;;
     esac
