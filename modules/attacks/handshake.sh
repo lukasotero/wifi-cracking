@@ -192,46 +192,104 @@ function capture_handshake() {
                 read -p "Presiona Enter para continuar..."
                 ;;
             3)
-                # Verificar si hay handshake antes de eliminar
-                cap_to_check=""
-                if [ -f "${full_cap_path}-01.cap" ]; then
-                    cap_to_check="${full_cap_path}-01.cap"
-                elif [ -f "${full_cap_path}.cap" ]; then
-                    cap_to_check="${full_cap_path}.cap"
+                echo -e "${YELLOW}[*] Deteniendo captura y procesando archivos...${NC}"
+                
+                # Matar procesos de captura
+                pkill -f "airodump-ng.*$bssid"
+                killall airodump-ng 2>/dev/null
+                
+                # 1. Encontrar el archivo .cap más reciente
+                cap_path_base="${full_cap_path}"
+                # Si full_cap_path ya tiene extensión .cap, quitarla para buscar base
+                if [[ "$cap_path_base" == *.cap ]]; then
+                    cap_path_base="${cap_path_base%.*}"
                 fi
                 
-                # Matar proceso de captura
-                pkill -f "airodump-ng.*$bssid"
+                # Buscar el archivo más reciente que coincida con el patrón base
+                # Esto maneja casos como -01.cap, -02.cap, etc.
+                cap_to_check=$(ls -t "${cap_path_base}"*.cap 2>/dev/null | head -n 1)
                 
-                # Verificar si hay handshake válido
-                if [ ! -z "$cap_to_check" ] && [ -s "$cap_to_check" ]; then
-                    if timeout 10 aircrack-ng -b "$bssid" "$cap_to_check" 2>&1 | grep -q "1 handshake"; then
-                        echo ""
-                        echo -e "${GREEN}[!!!] Se detectó un handshake válido en el archivo${NC}"
-                        read -p "¿Deseas guardar el archivo? (s/n): " save_file
-                        if [[ "$save_file" == "s" || "$save_file" == "S" ]]; then
-                            # Renombrar archivo final
-                            if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
-                                mv "$cap_to_check" "${full_cap_path}.cap"
-                                cap_to_check="${full_cap_path}.cap"
-                            fi
-                            echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
-                            export HANDSHAKE_CAPTURED=1
-                            
-                            # Limpiar solo archivos auxiliares (csv, netxml, kismet)
-                            rm -f "${full_cap_path}"-*.csv "${full_cap_path}"-*.kismet.csv "${full_cap_path}"-*.kismet.netxml "${full_cap_path}"-*.log.csv
+                if [ -z "$cap_to_check" ]; then
+                    echo -e "${RED}[!] No se encontró ningún archivo de captura .cap${NC}"
+                    return
+                fi
+                
+                # 2. Verificar handshake con método robusto
+                echo -e "${CYAN}[*] Analizando archivo: $(basename "$cap_to_check")...${NC}"
+                
+                # Sincronizar y copiar para evitar errores de lectura
+                sync
+                cp -f "$cap_to_check" "/tmp/check_handshake_$$.cap" 2>/dev/null
+                
+                has_handshake=0
+                target_bssid_upper=$(echo "$bssid" | tr '[:lower:]' '[:upper:]')
+                
+                # Ejecutar aircrack-ng sobre copia temporal
+                aircrack_output=$(aircrack-ng "/tmp/check_handshake_$$.cap" 2>&1)
+                rm -f "/tmp/check_handshake_$$.cap"
+                
+                # Buscar si nuestro BSSID tiene handshake
+                if echo "$aircrack_output" | grep -F "$target_bssid_upper" | grep -qi "handshake"; then
+                    has_handshake=1
+                fi
+                
+                # 3. Procesar resultados
+                if [ "$has_handshake" -eq 1 ]; then
+                    echo -e "${GREEN}[+] ¡Handshake VÁLIDO confirmado!${NC}"
+                    
+                    # Nombre final deseado (ej: Solaris.cap)
+                    final_cap_name="${cap_path_base}.cap"
+                    
+                    # Renombrar si es necesario (ej: de Solaris-01.cap a Solaris.cap)
+                    if [ "$cap_to_check" != "$final_cap_name" ]; then
+                        echo -e "${CYAN}[*] Renombrando a: $(basename "$final_cap_name")${NC}"
+                        mv "$cap_to_check" "$final_cap_name"
+                        cap_to_check="$final_cap_name"
+                    fi
+                    
+                    # Conversión a hccapx/22000
+                    hash_file="${cap_path_base}.hc22000"
+                    
+                    if command -v hcxpcapngtool &> /dev/null; then
+                        echo -e "${CYAN}[*] Convirtiendo a formato Hashcat 22000 (hcxpcapngtool)...${NC}"
+                        hcxpcapngtool -o "$hash_file" "$cap_to_check" >/dev/null 2>&1
+                        if [ -f "$hash_file" ]; then
+                            echo -e "${GREEN}[+] Hash guardado en: $(basename "$hash_file")${NC}"
                         else
-                            echo -e "${YELLOW}[*] Eliminando todos los archivos de captura...${NC}"
-                            rm -f "${full_cap_path}"*
+                            echo -e "${RED}[!] Error al convertir con hcxpcapngtool${NC}"
                         fi
                     else
-                        echo -e "${YELLOW}[*] No se detectó handshake. Eliminando archivos incompletos...${NC}"
-                        rm -f "${full_cap_path}"*
+                        echo -e "${YELLOW}[!] hcxpcapngtool no instalado. No se pudo convertir a hash.${NC}"
+                        echo -e "${YELLOW}[*] Instala 'hcxtools' para esta función: sudo apt install hcxtools${NC}"
                     fi
+                    
+                    # Limpieza segura de archivos auxiliares
+                    echo -e "${CYAN}[*] Limpiando archivos temporales innecesarios...${NC}"
+                    rm -f "${cap_path_base}"-*.csv "${cap_path_base}"-*.kismet.csv "${cap_path_base}"-*.kismet.netxml "${cap_path_base}"-*.log.csv 2>/dev/null
+                    # Borrar también los .cap antiguos (-01, -02) si ya renombramos el bueno
+                    if [ "$cap_to_check" == "$final_cap_name" ]; then
+                        rm -f "${cap_path_base}"-*.cap 2>/dev/null
+                    fi
+                    
+                    echo -e "${GREEN}[SUCCESS] Captura completada y guardada en $(dirname "$final_cap_name")${NC}"
+                    export HANDSHAKE_CAPTURED=1
+                    
                 else
-                    echo -e "${YELLOW}[*] Eliminando archivos de captura...${NC}"
-                    rm -f "${full_cap_path}"*
+                    echo -e "${RED}[!] No se detectó handshake en el archivo.${NC}"
+                    echo -e "${YELLOW}Análisis de aircrack-ng:${NC}"
+                    echo "----------------------------------------"
+                    echo "$aircrack_output" | grep -F "$target_bssid_upper" -A 2
+                    echo "----------------------------------------"
+                    
+                    read -p "¿Deseas conservar el archivo de captura de todas formas? (s/N): " keep
+                    if [[ "$keep" =~ ^[sS]$ ]]; then
+                        echo -e "${GREEN}[+] Archivo conservado en: $cap_to_check${NC}"
+                    else
+                        echo -e "${YELLOW}[*] Eliminando captura fallida...${NC}"
+                        rm -f "${cap_path_base}"* 2>/dev/null
+                    fi
                 fi
+                
                 return
                 ;;
             *) echo "Opción inválida." ;;

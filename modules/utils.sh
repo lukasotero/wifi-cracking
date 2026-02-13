@@ -239,7 +239,6 @@ echo -e "${YELLOW}[*]${NC} Iniciando airodump-ng..."
 echo ""
 
 # Función para verificar handshake en background
-# Función para verificar handshake en background
 check_handshake_loop() {
     local bssid="$1"
     local cap_path="$2"
