@@ -62,41 +62,91 @@ function select_file() {
 
 function verify_handshake() {
     banner
-    echo -e "${YELLOW}[*] Verificar integridad del Handshake${NC}"
+    echo -e "${YELLOW}[*] Verificar integridad de archivos (.cap / .hc22000)${NC}"
+
+    # 1. Listar archivos compatibles (.cap y .hc22000)
+    # Globbing seguro
+    local files=("$WORK_DIR"/*.cap "$WORK_DIR"/*.hc22000)
+    local valid_files=()
     
-    if ! select_file "*.cap" "Selecciona el archivo de captura a verificar:"; then
-        read -p "Presiona Enter para volver..."
+    for f in "${files[@]}"; do
+        if [ -e "$f" ]; then
+            valid_files+=("$f")
+        fi
+    done
+
+    if [ ${#valid_files[@]} -eq 0 ]; then
+         echo -e "${RED}[!] No se encontraron archivos de captura en $WORK_DIR${NC}"
+         read -p "Presiona Enter para volver..."
+         return
+    fi
+    
+    echo -e "Archivos disponibles en ${CYAN}$WORK_DIR${NC}:"
+    local i=1
+    for file in "${valid_files[@]}"; do
+        echo -e "  ${CYAN}$i)${NC} $(basename "$file")"
+        ((i++))
+    done
+
+    echo ""
+    read -p "  → Selecciona un archivo (número): " choice
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#valid_files[@]}" ]; then
+        echo -e "${RED}[!] Selección inválida.${NC}"
+        sleep 1
         return
     fi
-    cap_file="$SELECTED_FILE"
-    
-    read -p "Ingresa el BSSID (opcional, Enter para omitir): " bssid
-    
-    echo -e "${YELLOW}[*] Analizando archivo: $(basename "$cap_file")...${NC}"
+
+    local selected_file="${valid_files[$((choice-1))]}"
+    local filename=$(basename "$selected_file")
+
+    echo -e "${YELLOW}[*] Analizando: $filename...${NC}"
     echo ""
-    
-    if [ -z "$bssid" ]; then
-        # Modo general: Mostrar todas las redes y ver si alguna tiene handshake
-        aircrack-ng "$cap_file"
-        echo ""
-        echo -e "${CYAN}[i] Busca '(1 handshake)' en la columna 'WPA' o en el resumen.${NC}"
-    else
-        # Modo específico: Validar contra BSSID
-        echo -e "${YELLOW}[*] Validando handshake para $bssid...${NC}"
-        output=$(aircrack-ng -b "$bssid" "$cap_file" 2>&1)
-        
-        # Mostrar salida filtrada relevante
-        echo "$output" | grep -E "handshake|No valid packets"
-        
-        if echo "$output" | grep -q "1 handshake"; then
-             echo ""
-             echo -e "${GREEN}[OK] Handshake VÁLIDO encontrado para $bssid.${NC}"
-        else
-             echo ""
-             echo -e "${RED}[!] NO se detectó un handshake válido o completo.${NC}"
-        fi
+
+    if [[ "$filename" == *.cap ]]; then
+         # Lógica Aircrack para .cap
+         aircrack_output=$(aircrack-ng "$selected_file" 2>&1)
+         
+         # Filtrar líneas con handshakes > 0
+         valid_handshakes=$(echo "$aircrack_output" | grep -E "\([1-9][0-9]* handshake\)")
+         
+         if [ -n "$valid_handshakes" ]; then
+             echo -e "${GREEN}[SUCCESS] ¡Se detectaron Handshakes Válidos!${NC}"
+             echo -e "${CYAN}Redes confirmadas:${NC}"
+             echo "$valid_handshakes"
+         else
+             echo -e "${RED}[FAIL] El archivo no contiene handshakes válidos.${NC}"
+             echo "Resumen:"
+             echo "$aircrack_output" | grep -E "handshake|Encryption" | head -n 5
+         fi
+
+    elif [[ "$filename" == *.hc22000 ]]; then
+         # Lógica para archivos Hashcat (.hc22000)
+         
+         # 1. Verificar si está vacío
+         if [ ! -s "$selected_file" ]; then
+             echo -e "${RED}[FAIL] El archivo .hc22000 está vacío o corrupto.${NC}"
+             read -p "Presiona Enter para continuar..."
+             return
+         fi
+
+         # 2. Intentar usar hcxhashtool para ver detalles (SSID, etc)
+         if command -v hcxhashtool &> /dev/null; then
+             echo -e "${GREEN}[SUCCESS] Archivo Hashcat válido. Detalles:${NC}"
+             echo "---------------------------------------------------"
+             hcxhashtool -i "$selected_file" --info=stdout | grep -E "ESSID|BSSID|Encryption"
+             echo "---------------------------------------------------"
+             echo -e "${CYAN}Total de hashes: $(wc -l < "$selected_file")${NC}"
+         else
+             # Fallback manual
+             line_count=$(wc -l < "$selected_file")
+             echo -e "${GREEN}[SUCCESS] Archivo válido (texto no vacío).${NC}"
+             echo -e "Contiene ${CYAN}$line_count${NC} hashes listos para crackear."
+             echo -e "${YELLOW}[i] Instala 'hcxtools' para ver el nombre de la red (ESSID) aquí.${NC}"
+         fi
     fi
-     
+
+    echo ""
     read -p "Presiona Enter para continuar..."
 }
 

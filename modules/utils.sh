@@ -141,6 +141,8 @@ function check_dependencies() {
         "wget:wget"
         "macchanger:macchanger"
         "cowpatty:cowpatty"
+        "hcxpcapngtool:hcxtools"
+        "hcxhashtool:hcxtools"
     )
 
     for item in "${dependencies[@]}"; do
@@ -168,17 +170,6 @@ function check_dependencies() {
             echo -e "${GREEN}[OK] $tool encontrado.${NC}"
         fi
     done
-
-    # Verificación opcional para hcxtools
-    if ! command -v hcxpcapngtool &> /dev/null; then
-        echo -e "${YELLOW}[INFO] 'hcxpcapngtool' no encontrado (útil para convertir .cap a hashcat).${NC}"
-        read -p "¿Deseas instalar 'hcxtools' (opcional)? (s/n): " choice
-        if [[ "$choice" == "s" || "$choice" == "S" ]]; then
-             apt-get update && apt-get install -y hcxtools
-        fi
-    else
-        echo -e "${GREEN}[OK] hcxpcapngtool encontrado.${NC}"
-    fi
 
     echo -e "${GREEN}[*] Todas las dependencias están listas.${NC}"
     sleep 2
@@ -326,7 +317,9 @@ check_handshake_loop() {
             
             # Buscar si nuestro BSSID tiene handshake
             # Aircrack muestra: "1  AA:BB:CC:DD:EE:FF  NombreRed  WPA (1 handshake)"
-            if echo "$aircrack_output" | grep -F "$target_bssid" | grep -qi "handshake" | grep -qv "0 handshake"; then
+            # Verificar handshake si existe el archivo
+            # Verificación más robusta que coincide con la lógica principal
+            if echo "$aircrack_output" | grep -F "$target_bssid" | grep -E "handshake|Handshake" | grep -qv "0 handshake"; then
                 
                 # 1. Crear archivo de señal INMEDIATAMENTE
                 touch "/tmp/handshake_captured_$wrapper_pid.flag"

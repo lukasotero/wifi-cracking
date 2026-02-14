@@ -120,6 +120,9 @@ function capture_handshake() {
                     echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
                     echo ""
                     
+                    # Desactivar trap de limpieza interactiva para evitar prompts al salir
+                    trap - SIGINT EXIT
+                    
                     # Preguntar crack immediate
                     while true; do
                         read -p "¿Crackear ahora? (s/n): " crack_now
@@ -268,6 +271,9 @@ function capture_handshake() {
                 if [ "$has_handshake" -eq 1 ]; then
                     echo -e "${GREEN}[+] ¡Handshake VÁLIDO confirmado!${NC}"
                     
+                    # Desactivar trap de limpieza interactiva
+                    trap - SIGINT EXIT
+                    
                     # Nombre final deseado (ej: Solaris.cap)
                     final_cap_name="${cap_path_base}.cap"
                     
@@ -316,8 +322,8 @@ function capture_handshake() {
                     if [[ "$keep" =~ ^[sS]$ ]]; then
                         echo -e "${GREEN}[+] Archivo conservado en: $cap_to_check${NC}"
                     else
-                        echo -e "${YELLOW}[*] Archivo conservado en: $cap_to_check (verificación fallida)${NC}"
-                        # rm -f "${cap_path_base}"* 2>/dev/null
+                        echo -e "${YELLOW}[*] Eliminando captura fallida...${NC}"
+                        rm -f "${cap_path_base}"* 2>/dev/null
                     fi
                 fi
                 
