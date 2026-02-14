@@ -19,12 +19,22 @@ function crack_password_auto() {
     
     echo -e "${GREEN}[*] Usando diccionario: $wordlist${NC}"
     
-    # Decidir herramienta basado en extensión o tipo
+    # Priorizar Hashcat si existe la versión convertida
+    local hc22000_file="${cap_file_input%.*}.hc22000"
+    
     if [[ "$cap_file_input" == *.hc22000 ]]; then
-        echo -e "${YELLOW}[*] Detectado Hashcat Mode (PMKID/Converted). Usando GPU...${NC}"
+        # El input ya es el hash
+        echo -e "${YELLOW}[*] Modo Hashcat directo...${NC}"
         hashcat -a 0 -m 22000 -w 3 "$cap_file_input" "$wordlist"
+    elif [ -f "$hc22000_file" ]; then
+        # Se encontró la versión convertida automáticamente
+        echo -e "${GREEN}[*] Detectado archivo convertido: $(basename "$hc22000_file")${NC}"
+        echo -e "${YELLOW}[*] Usando Hashcat (GPU) para mayor velocidad...${NC}"
+        hashcat -a 0 -m 22000 -w 3 "$hc22000_file" "$wordlist"
     else
-        echo -e "${YELLOW}[*] Detectado Aircrack-ng Mode (Handshake). Usando CPU...${NC}"
+        # Fallback a CPU solo si no hay opción
+        echo -e "${RED}[!] No se encontró archivo .hc22000.${NC}"
+        echo -e "${YELLOW}[*] Usando Aircrack-ng (CPU Legacy Mode)...${NC}"
         aircrack-ng -a2 -b "$bssid_input" -w "$wordlist" "$cap_file_input"
     fi
     read -p "Presiona Enter para continuar..."
@@ -103,7 +113,31 @@ function verify_handshake() {
     echo -e "${YELLOW}[*] Analizando: $filename...${NC}"
     echo ""
 
-    if [[ "$filename" == *.cap ]]; then
+    elif [[ "$filename" == *.hc22000 ]]; then
+         # Lógica para archivos Hashcat (.hc22000)
+         
+         if [ ! -s "$selected_file" ]; then
+             echo -e "${RED}[FAIL] El archivo .hc22000 está vacío o corrupto.${NC}"
+             read -p "Presiona Enter para continuar..."
+             return
+         fi
+
+         if command -v hcxhashtool &> /dev/null; then
+             echo -e "${GREEN}[SUCCESS] Archivo Hashcat válido.${NC}"
+             echo -e "${YELLOW}--- Detalles del Hash ---${NC}"
+             # Mostrar info útil filtrada
+             info=$(hcxhashtool -i "$selected_file" --info=stdout)
+             echo "$info" | grep -E "ESSID|BSSID|Encryption|EAPOL"
+             echo "---------------------------------------------------"
+             echo -e "${CYAN}Total de líneas (hashes): $(wc -l < "$selected_file")${NC}"
+         else
+             # Fallback manual
+             line_count=$(wc -l < "$selected_file")
+             echo -e "${GREEN}[SUCCESS] Archivo válido (texto no vacío).${NC}"
+             echo -e "Contiene ${CYAN}$line_count${NC} hashes listos para crackear."
+         fi
+         
+    elif [[ "$filename" == *.cap ]]; then
          # Lógica Aircrack para .cap
          aircrack_output=$(aircrack-ng "$selected_file" 2>&1)
          
@@ -114,35 +148,26 @@ function verify_handshake() {
              echo -e "${GREEN}[SUCCESS] ¡Se detectaron Handshakes Válidos!${NC}"
              echo -e "${CYAN}Redes confirmadas:${NC}"
              echo "$valid_handshakes"
+             
+             # Ofrecer conversión si no existe el .hc22000
+             hc_file="${selected_file%.*}.hc22000"
+             if [ ! -f "$hc_file" ] && command -v hcxpcapngtool &> /dev/null; then
+                 echo ""
+                 read -p "¿Deseas generar el archivo Hashcat (.hc22000) ahora? (S/n): " conv
+                 conv=${conv:-S}
+                 if [[ "$conv" =~ ^[sS] ]]; then
+                     hcxpcapngtool -o "$hc_file" "$selected_file" >/dev/null 2>&1
+                     if [ -f "$hc_file" ]; then
+                         echo -e "${GREEN}[+] Archivo generado: $(basename "$hc_file")${NC}"
+                     else
+                         echo -e "${RED}[!] Error al convertir.${NC}"
+                     fi
+                 fi
+             fi
          else
              echo -e "${RED}[FAIL] El archivo no contiene handshakes válidos.${NC}"
              echo "Resumen:"
              echo "$aircrack_output" | grep -E "handshake|Encryption" | head -n 5
-         fi
-
-    elif [[ "$filename" == *.hc22000 ]]; then
-         # Lógica para archivos Hashcat (.hc22000)
-         
-         # 1. Verificar si está vacío
-         if [ ! -s "$selected_file" ]; then
-             echo -e "${RED}[FAIL] El archivo .hc22000 está vacío o corrupto.${NC}"
-             read -p "Presiona Enter para continuar..."
-             return
-         fi
-
-         # 2. Intentar usar hcxhashtool para ver detalles (SSID, etc)
-         if command -v hcxhashtool &> /dev/null; then
-             echo -e "${GREEN}[SUCCESS] Archivo Hashcat válido. Detalles:${NC}"
-             echo "---------------------------------------------------"
-             hcxhashtool -i "$selected_file" --info=stdout | grep -E "ESSID|BSSID|Encryption"
-             echo "---------------------------------------------------"
-             echo -e "${CYAN}Total de hashes: $(wc -l < "$selected_file")${NC}"
-         else
-             # Fallback manual
-             line_count=$(wc -l < "$selected_file")
-             echo -e "${GREEN}[SUCCESS] Archivo válido (texto no vacío).${NC}"
-             echo -e "Contiene ${CYAN}$line_count${NC} hashes listos para crackear."
-             echo -e "${YELLOW}[i] Instala 'hcxtools' para ver el nombre de la red (ESSID) aquí.${NC}"
          fi
     fi
 
@@ -152,7 +177,9 @@ function verify_handshake() {
 
 function crack_password() {
     banner
-    echo -e "${YELLOW}[*] Configuración del ataque de diccionario${NC}"
+    echo -e "${YELLOW}[*] Ataque de Diccionario (Hashcat Mode)${NC}"
+    echo -e "${CYAN}[i] Nota: Hashcat requiere archivos convertidos (.hc22000).${NC}"
+    echo -e "${CYAN}    Si tu captura es .cap, asegúrate de que se haya convertido automáticamente.${NC}"
     
     # 1. Selección de Diccionario
     while true; do
@@ -205,70 +232,26 @@ function crack_password() {
         esac
     done
 
-    # 2. Pedir archivo de captura (.cap)
-    if ! select_file "*.cap" "Selecciona el archivo de captura (.cap):"; then
+    # 2. Pedir archivo de hash (.hc22000)
+    # Cambio solicitado: Filtrar solo .hc22000
+    if ! select_file "*.hc22000" "Selecciona el archivo Hashcat (.hc22000):"; then
+        echo -e "${YELLOW}[INFO] No se encontraron archivos .hc22000.${NC}"
+        echo -e "${YELLOW}       Si tienes un .cap, usa la opción de 'Herramientas > Convertir' o captura de nuevo.${NC}"
         read -p "Presiona Enter para volver..."
         return
     fi
-    cap_file="$SELECTED_FILE"
+    hash_file="$SELECTED_FILE"
 
-    # 3. Menú de recursos
+    # 3. Ejecutar Hashcat
+    echo -e "${YELLOW}[*] Iniciando ataque con Hashcat (Mode 22000)...${NC}"
+    echo -e "${CYAN}Comando: hashcat -a 0 -m 22000 -w 3 [archivo] [diccionario]${NC}"
+    
+    # Auto-detectar dispositivo (Hashcat lo hace solo, pero -w 3 ayuda a rendimiento)
+    hashcat -a 0 -m 22000 -w 3 "$hash_file" "$wordlist"
+    
     echo ""
-    echo "Selecciona el recurso para crackear:"
-    echo "1) CPU (Aircrack-ng - Estándar)"
-    echo "2) GPU (Hashcat - Alto Rendimiento)"
-    read -p "Opción: " resource_opt
-
-    case $resource_opt in
-        1)
-            echo -e "${YELLOW}[*] Necesitamos el BSSID para filtrar el ataque.${NC}"
-            read -p "Ingresa el BSSID del objetivo: " bssid
-            
-            echo -e "${YELLOW}[*] Iniciando aircrack-ng con CPU...${NC}"
-            echo -e "${RED}[!] IMPORTANTE: Solo funcionará si la contraseña está en tu diccionario.${NC}"
-            aircrack-ng -a2 -b "$bssid" -w "$wordlist" "$cap_file"
-            ;;
-        2)
-            echo -e "${YELLOW}[*] Preparando ataque con GPU (Hashcat)...${NC}"
-            
-            # Lógica de conversión
-            hash_file=""
-            if command -v hcxpcapngtool &> /dev/null; then
-                 echo -e "${GREEN}[*] Herramienta 'hcxpcapngtool' detectada.${NC}"
-                 output_hc="${cap_file%.*}.hc22000"
-                 
-                 echo -e "${YELLOW}[*] Convirtiendo .cap a formato hashcat (.hc22000)...${NC}"
-                 hcxpcapngtool -o "$output_hc" "$cap_file"
-                 
-                 if [ -f "$output_hc" ]; then
-                     echo -e "${GREEN}[+] Conversión exitosa: $output_hc${NC}"
-                     hash_file="$output_hc"
-                 else
-                     echo -e "${RED}[!] Falló la conversión automática.${NC}"
-                 fi
-            else
-                 echo -e "${YELLOW}[!] No se encontró 'hcxpcapngtool' para conversión automática.${NC}"
-                 echo -e "${YELLOW}[!] Necesitas convertir el archivo .cap a .hc22000 manualmente (ej. https://hashcat.net/cap2hashcat/).${NC}"
-            fi
-
-            if [ -z "$hash_file" ]; then
-                while true; do
-                    read -p "Ingresa la ruta del archivo convertido (.hc22000): " hash_file
-                    if [ -f "$hash_file" ]; then
-                        break
-                    else
-                         echo -e "${RED}[!] Archivo no encontrado.${NC}"
-                    fi
-                done
-            fi
-            
-            echo -e "${YELLOW}[*] Iniciando hashcat (Modo 22000)...${NC}"
-            hashcat -a 0 -m 22000 -w 3 "$hash_file" "$wordlist"
-            ;;
-        *)
-            echo "Opción inválida."
-            ;;
-    esac
+    echo -e "${YELLOW}[*] Ataque finalizado.${NC}"
+    
     read -p "Presiona Enter para continuar..."
 }
 

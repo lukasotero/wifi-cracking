@@ -107,17 +107,39 @@ function capture_handshake() {
                 check_output=$(timeout 15 aircrack-ng "$cap_to_check" 2>&1)
                 
                 # Verificar si contiene handshake para el BSSID objetivo (o en general si solo hay una red)
-                if echo "$check_output" | grep -F "$target_bssid_upper" | grep -E "handshake|Handshake" | grep -qv "0 handshake"; then
                     echo -e "${GREEN}[!!!] HANDSHAKE CAPTURADO EXITOSAMENTE${NC}"
                     export HANDSHAKE_CAPTURED=1
                     
-                    # Renombrar archivo final al nombre deseado (sin -01) para guardarlo limpio
-                    if [[ "$cap_to_check" != "${full_cap_path}.cap" ]]; then
-                        mv "$cap_to_check" "${full_cap_path}.cap"
-                        cap_to_check="${full_cap_path}.cap"
+                    # 1. Renombrar archivo final (-01.cap -> .cap)
+                    # airodump agrega -01, lo renombramos al nombre limpio que quería el usuario
+                    final_cap="${full_cap_path}.cap"
+                    
+                    if [[ "$cap_to_check" != "$final_cap" ]]; then
+                        mv "$cap_to_check" "$final_cap"
+                        cap_to_check="$final_cap"
                     fi
                     
-                    echo -e "${GREEN}[+] Archivo guardado en: $cap_to_check${NC}"
+                    echo -e "${GREEN}[+] Archivo .cap guardado en: $cap_to_check${NC}"
+
+                    # 2. Convertir automáticamente a .hc22000 (Hashcat)
+                    hash_file="${full_cap_path}.hc22000"
+                    
+                    if command -v hcxpcapngtool &> /dev/null; then
+                        echo -e "${CYAN}[*] Convirtiendo a formato Hashcat 22000 (.hc22000)...${NC}"
+                        hcxpcapngtool -o "$hash_file" "$cap_to_check" >/dev/null 2>&1
+                        if [ -f "$hash_file" ]; then
+                            echo -e "${GREEN}[+] Archivo Hashcat generado: $(basename "$hash_file")${NC}"
+                        else
+                            echo -e "${RED}[!] Error al convertir con hcxpcapngtool${NC}"
+                        fi
+                    else
+                        echo -e "${YELLOW}[!] hcxpcapngtool no instalado. Instala 'hcxtools' para auto-conversión.${NC}"
+                    fi
+
+                    # 3. Limpieza de archivos auxiliares basura
+                    # Borrar los csv, netxml, etc. generados con el patrón "nombre-01.*"
+                    rm -f "${full_cap_path}"-*.csv "${full_cap_path}"-*.kismet.csv "${full_cap_path}"-*.kismet.netxml "${full_cap_path}"-*.log.csv 2>/dev/null
+                    
                     echo ""
                     
                     # Desactivar trap de limpieza interactiva para evitar prompts al salir
@@ -125,7 +147,8 @@ function capture_handshake() {
                     
                     # Preguntar crack immediate
                     while true; do
-                        read -p "¿Crackear ahora? (s/n): " crack_now
+                        read -p "¿Crackear ahora? (S/n): " crack_now
+                        crack_now=${crack_now:-S} # Default a S
                         case $crack_now in
                             [sS]* ) crack_password_auto "$cap_to_check" "$bssid"; break ;;
                             [nN]* ) break ;;
@@ -165,8 +188,8 @@ function capture_handshake() {
         echo -e "  ${CYAN}3${NC}  Detener captura y verificar"
         echo ""
         
-        # Read con timeout para refrescar estado cada 3 segundos
-        read -t 3 -p "  → Opción: " hs_opt
+        # Read con timeout para refrescar estado cada 10 segundos
+        read -t 10 -p "  → Opción: " hs_opt
         exit_code=$?
         
         if [ $exit_code -ne 0 ]; then
@@ -329,6 +352,7 @@ function capture_handshake() {
                 
                 return
                 ;;
+            "" ) ;; # Ignorar enter vacío (refrescar)
             *) echo "Opción inválida." ;;
         esac
     done
